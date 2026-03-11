@@ -1,14 +1,15 @@
-Frontend Structure--
-
 src/
-├── assets/          # Static files (images, svgs, fonts)
-├── components/      # Shared/Global UI components (Buttons, Inputs, Modals)
-├── features/        # The "Meat" - organized by domain (auth, products, cart)
-├── hooks/           # Global reusable custom hooks
-├── layouts/         # Page wrappers (AdminLayout, PublicLayout)
-├── lib/             # Third-party configurations (axios, firebase, supabase)
-├── pages/           # Route views (only imports features/components)
-├── services/        # Global API calls/Business logic
-├── store/           # Global state management (Zustand, Redux, or Context)
-├── utils/           # Helper functions (formatting dates, currency)
-└── types/           # Global TypeScript interfaces/types
+├── assets/          # JARVIS branding, icons, and UI sounds
+├── components/      # Global UI (Status badges, Gauge charts, Toggle switches)
+├── features/        # Feature-based logic
+│   ├── automation/  # Routine builders and scheduling logic
+│   ├── devices/     # Device linking and Wake on LAN logic
+│   └── nodes/       # Monitoring online/offline node status
+├── hooks/           # useWebSocket, useDeviceStatus, useAuth
+├── layouts/         # DashboardLayout (Sidebar + System Tray style)
+├── lib/             # API clients (Axios instance for REST, WS client)
+├── pages/           # Dashboard, NodeSettings, AutomationFlow
+├── services/        # The "Bridge" (Calls to Axum API or Tauri/Rust)
+├── store/           # Global state (Active nodes, System volume, Spotify state)
+├── utils/           # formatBytes, parseCommand, wakeWordHelpers
+└── types/           # TS Interfaces for Nodes, Users, and MCP schemas
