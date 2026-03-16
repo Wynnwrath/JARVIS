@@ -45,7 +45,6 @@ export const useSystemData = () => {
     const fetchBackendData = async () => {
       try {
         setIsLoading(true);
-        // Simulating a 1.2 second network delay to boot up the dashboard
         await new Promise(resolve => setTimeout(resolve, 1200));
         setIsLoading(false);
       } catch (err) {
