@@ -21,12 +21,12 @@ export const Sidebar = ({ onSettingsClick }: SidebarProps) => {
       initial={false}
       animate={{ width: isOpen ? "16rem" : "4rem" }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="h-full bg-surface-2 border-r border-surface-3 flex flex-col z-40 relative shrink-0"
+      className="h-full bg-surface-2/70 backdrop-blur-xl border-r border-white/5 flex flex-col z-40 relative shrink-0"
     >
       {/* HEADER  */}
       <div 
         data-tauri-drag-region 
-        className="h-14 flex items-center border-b border-surface-3 relative px-2"
+        className="h-14 flex items-center border-b border-surface-3/50 relative px-2"
       >
         <div className="w-12 shrink-0 flex items-center justify-center pointer-events-none">
           <div className="flex items-center justify-center w-8 h-8 rounded border border-jarvis-blue/50 bg-jarvis-blue/10 shadow-[0_0_10px_rgba(0,240,255,0.2)]">
@@ -51,7 +51,7 @@ export const Sidebar = ({ onSettingsClick }: SidebarProps) => {
           onClick={() => setIsOpen(!isOpen)}
           className={`flex items-center justify-center text-secondary-txt hover:text-jarvis-blue transition-all z-50
             ${isOpen 
-              ? 'ml-auto w-8 h-8 rounded-md hover:bg-surface-1 shrink-0' 
+              ? 'ml-auto w-8 h-8 rounded-md hover:bg-surface-1/50 shrink-0' 
               : 'absolute -right-3 top-4 w-6 h-6 bg-surface-2 border border-surface-3 rounded-full shadow-md'
             }
           `}
@@ -72,7 +72,7 @@ export const Sidebar = ({ onSettingsClick }: SidebarProps) => {
               className={`flex items-center h-10 rounded-md transition-all duration-200 overflow-hidden group
                 ${isActive 
                   ? 'bg-jarvis-blue/10 text-jarvis-blue border border-jarvis-blue/30 shadow-[inset_2px_0_0_#00F0FF]' 
-                  : 'text-secondary-txt border border-transparent hover:bg-surface-1 hover:text-primary-txt'
+                  : 'text-secondary-txt border border-transparent hover:bg-surface-1/50 hover:text-primary-txt'
                 }
               `}
               title={!isOpen ? item.name : ""}
@@ -103,7 +103,7 @@ export const Sidebar = ({ onSettingsClick }: SidebarProps) => {
       <div className="mt-auto flex flex-col pb-2 px-2 gap-2">
         <button
           onClick={onSettingsClick}
-          className="w-full flex items-center h-10 rounded-md transition-all duration-200 overflow-hidden group text-secondary-txt border border-transparent hover:bg-surface-1 hover:text-primary-txt"
+          className="w-full flex items-center h-10 rounded-md transition-all duration-200 overflow-hidden group text-secondary-txt border border-transparent hover:bg-surface-1/50 hover:text-primary-txt"
           title={!isOpen ? "Settings" : ""}
         >
           <div className="w-12 shrink-0 flex items-center justify-center transition-transform group-hover:rotate-45">
@@ -125,7 +125,8 @@ export const Sidebar = ({ onSettingsClick }: SidebarProps) => {
       </div>
 
       {/* FOOTER */}
-      <div className="h-12 flex items-center border-t border-surface-3 bg-surface-1 px-2">
+      {/* THE FIX 2: Changed bg-surface-1 to bg-transparent so the glass continues to the bottom */}
+      <div className="h-12 flex items-center border-t border-white/5 bg-transparent px-2">
         <div className="w-12 shrink-0 flex items-center justify-center">
           <div className="w-2 h-2 rounded-full bg-success-green shadow-[0_0_8px_#00FF66] animate-pulse"></div>
         </div>
