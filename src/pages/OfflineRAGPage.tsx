@@ -55,6 +55,26 @@ export const OfflineRAGPage = () => {
     refreshRagData();
   }, [vaultPath]);
 
+  const handleSwitchWorkspace = async (newPath: string) => {
+    try {
+      const config = await getConfig();
+      config.sandbox_dir = newPath;
+      await saveConfig(config);
+
+      setVaultPath(newPath);
+      setLogs(prev => [
+        ...prev,
+        `[WORKSPACE] Shifted workspace core target: "${newPath}"`,
+        `[DISCOVERY] Loading folder entries...`
+      ]);
+
+      // Force reload
+      await loadDirectory("");
+    } catch (err) {
+      console.error('[OfflineRAGPage] Failed to switch workspace:', err);
+    }
+  };
+
   const handleSelectPath = async () => {
     try {
       const selected = await open({ directory: true, multiple: false, title: 'Target Local Document Folder' });
