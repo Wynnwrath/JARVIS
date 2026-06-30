@@ -3,42 +3,12 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-fn default_transcription_model_path() -> String {
-    "parakeet-tdt-0.6b-v3-int8".to_string()
-}
-fn default_database_name() -> String {
-    "jarvis.db".to_string()
-}
-fn default_system_prompt() -> String {
-    include_str!("defaults/system_prompt.md").to_string()
-}
-fn default_compaction_prompt() -> String {
-    "Summarize this context briefly, capturing key points.".to_string()
-}
-fn default_compaction_threshold() -> usize {
-    128000
-}
-fn default_sandbox_dir() -> String {
-    ".".to_string()
-}
-
-fn default_read_extensions() -> HashSet<String> {
-    [
-        "txt", "md", "pdf", "json", "toml", "rs", "js", "ts", "tsx", "html", "css",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect()
-}
-
-fn default_write_extensions() -> HashSet<String> {
-    [
-        "txt", "md", "json", "toml", "rs", "js", "ts", "tsx", "html", "css",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect()
-}
+use super::defaults::{
+    default_compaction_prompt, default_compaction_threshold, default_database_name,
+    default_read_extensions, default_sandbox_dir, default_system_prompt,
+    default_transcription_model_path, default_write_extensions,
+};
+use super::providers::Providers;
 
 /// Top-level application configuration, deserialized from `config.toml`.
 ///
@@ -77,72 +47,16 @@ pub struct AppConfig {
     /// Root directory for sandboxed file read/write operations.
     #[serde(default = "default_sandbox_dir")]
     pub sandbox_dir: String,
+    /// Additional directories the agent may read/write without prompting.
+    /// `sandbox_dir` is always the primary root (index 0).
+    #[serde(default)]
+    pub sandbox_roots: Vec<String>,
     /// File extensions the agent is allowed to read.
     #[serde(default = "default_read_extensions")]
     pub read_extensions: HashSet<String>,
     /// File extensions the agent is allowed to write.
     #[serde(default = "default_write_extensions")]
     pub write_extensions: HashSet<String>,
-}
-
-/// Supported LLM providers.
-///
-/// Serialised to/from lowercase strings (e.g. `"openai"`, `"gemini"`, `"anthropic"`).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Providers {
-    /// Anthropic (Claude models via `api.anthropic.com`).
-    Anthropic,
-    /// OpenAI-compatible API (works with local servers like llama.cpp).
-    OpenAI,
-    /// Google Gemini API.
-    Gemini,
-}
-
-impl Providers {
-    /// Returns the lowercase string representation of this provider.
-    ///
-    /// Useful for serialising the provider name for the frontend or for
-    /// dynamic dispatch in the agent builder.
-    ///
-    /// # Returns
-    ///
-    /// A static string: `"openai"`, `"gemini"`, or `"anthropic"`.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Providers::OpenAI => "openai",
-            Providers::Gemini => "gemini",
-            Providers::Anthropic => "anthropic",
-        }
-    }
-
-    /// Returns all supported provider variants in a fixed order.
-    ///
-    /// # Returns
-    ///
-    /// A vector containing `OpenAI`, `Gemini`, and `Anthropic`.
-    pub fn all() -> Vec<Self> {
-        vec![Providers::OpenAI, Providers::Gemini, Providers::Anthropic]
-    }
-}
-
-impl std::fmt::Display for Providers {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-impl std::str::FromStr for Providers {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "openai" => Ok(Providers::OpenAI),
-            "gemini" => Ok(Providers::Gemini),
-            "anthropic" => Ok(Providers::Anthropic),
-            _ => Err(format!("Unknown provider: {}", s)),
-        }
-    }
 }
 
 impl Default for AppConfig {
@@ -161,6 +75,7 @@ impl Default for AppConfig {
             compaction_prompt: default_compaction_prompt(),
             compaction_threshold: default_compaction_threshold(),
             sandbox_dir: default_sandbox_dir(),
+            sandbox_roots: Vec::new(),
             read_extensions: default_read_extensions(),
             write_extensions: default_write_extensions(),
         }
@@ -190,7 +105,7 @@ impl AppConfig {
         let serialized = toml::to_string(&config)?;
         if serialized != content {
             if let Err(e) = config.save_to(path) {
-                eprintln!("Warning: failed to save updated config: {e}");
+                tracing::warn!(error = %e, "failed to save updated config");
             }
         }
         Ok(config)

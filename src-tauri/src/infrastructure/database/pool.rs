@@ -1,5 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use diesel::connection::SimpleConnection;
 use diesel::migration::MigrationSource;
@@ -13,7 +12,6 @@ use diesel_async::{
     SimpleAsyncConnection,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use tokio::sync::Mutex;
 
 pub const MIGRATIONS: EmbeddedMigrations =
     embed_migrations!("./src/infrastructure/database/migrations");
@@ -21,27 +19,22 @@ pub const MIGRATIONS: EmbeddedMigrations =
 pub type DbPool = Pool<SyncConnectionWrapper<SqliteConnection>>;
 
 static DB_POOL: OnceLock<DbPool> = OnceLock::new();
-static DB_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
 
 pub fn create_pool(database_url: &str) -> DbPool {
-    let pragmas_set = Arc::new(AtomicBool::new(false));
     let manager =
         AsyncDieselConnectionManager::<SyncConnectionWrapper<SqliteConnection>>::new(database_url);
     let mut builder = Pool::builder(manager);
     builder = builder.post_create(Hook::async_fn(
-        move |conn: &mut SyncConnectionWrapper<SqliteConnection>, _| {
-            let pragmas_set = pragmas_set.clone();
+        |conn: &mut SyncConnectionWrapper<SqliteConnection>, _| {
             Box::pin(async move {
-                if !pragmas_set.swap(true, Ordering::SeqCst) {
-                    conn.batch_execute(
-                        "PRAGMA foreign_keys = ON;\
+                conn.batch_execute(
+                    "PRAGMA foreign_keys = ON;\
                      PRAGMA journal_mode = WAL;\
                      PRAGMA synchronous = NORMAL;\
                      PRAGMA mmap_size = 30000000000;",
-                    )
-                    .await
-                    .map_err(|e| HookError::Message(e.to_string().into()))?;
-                }
+                )
+                .await
+                .map_err(|e| HookError::Message(e.to_string().into()))?;
                 Ok(())
             })
         },
@@ -80,19 +73,14 @@ pub fn global_pool() -> DbPool {
         .clone()
 }
 
-pub fn lock_db() -> Arc<Mutex<()>> {
-    DB_LOCK
-        .get_or_init(|| Arc::new(Mutex::new(())))
-        .clone()
-}
-
 /// Run all pending embedded migrations on the file at `database_url`.
 /// Blocks the current thread; call from startup only.
-pub fn run_migrations(database_url: &str) {
+pub fn run_migrations(database_url: &str) -> Result<(), crate::domain::errors::AppError> {
+    use crate::domain::errors::AppError;
     use diesel::Connection;
     use diesel::RunQueryDsl;
-    let mut conn =
-        SqliteConnection::establish(database_url).expect("Failed to open database for migrations");
+    let mut conn = SqliteConnection::establish(database_url)
+        .map_err(|e| AppError::SystemError(e.to_string()))?;
 
     // Pre-check: if our application tables exist but `__diesel_schema_migrations`
     // does not, this is a pre-diesel JARVIS database. Mark all embedded
@@ -114,17 +102,17 @@ pub fn run_migrations(database_url: &str) {
         "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='sessions')",
     ))
     .get_result(&mut conn)
-    .unwrap_or(false);
+    .map_err(|e| AppError::SystemError(e.to_string()))?;
     let has_history: bool = diesel::select(diesel::dsl::sql::<diesel::sql_types::Bool>(
         "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_history')",
     ))
     .get_result(&mut conn)
-    .unwrap_or(false);
+    .map_err(|e| AppError::SystemError(e.to_string()))?;
     let has_migrations_table: bool = diesel::select(diesel::dsl::sql::<diesel::sql_types::Bool>(
         "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='__diesel_schema_migrations')",
     ))
     .get_result(&mut conn)
-    .unwrap_or(false);
+    .map_err(|e| AppError::SystemError(e.to_string()))?;
 
     if has_sessions && has_history && !has_migrations_table {
         conn.batch_execute(
@@ -133,12 +121,12 @@ pub fn run_migrations(database_url: &str) {
                  run_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\
              )",
         )
-        .expect("Failed to create __diesel_schema_migrations table");
+        .map_err(|e| AppError::SystemError(e.to_string()))?;
 
         let migrations: Vec<Box<dyn diesel::migration::Migration<diesel::sqlite::Sqlite>>> =
             MIGRATIONS
                 .migrations()
-                .expect("Failed to load embedded migrations");
+                .map_err(|e| AppError::SystemError(e.to_string()))?;
         for m in &migrations {
             let version = m.name().version().to_string();
             diesel::sql_query(format!(
@@ -146,10 +134,11 @@ pub fn run_migrations(database_url: &str) {
                 version
             ))
             .execute(&mut conn)
-            .expect("Failed to record pre-existing schema migration");
+            .map_err(|e| AppError::SystemError(e.to_string()))?;
         }
     }
 
     conn.run_pending_migrations(MIGRATIONS)
-        .expect("Failed to run database migrations");
+        .map_err(|e| AppError::SystemError(e.to_string()))?;
+    Ok(())
 }

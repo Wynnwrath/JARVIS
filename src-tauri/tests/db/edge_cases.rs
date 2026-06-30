@@ -7,7 +7,7 @@ async fn database_is_reopenable_and_persists_data() {
     let path = unique_db_path("reopen");
 
     {
-        run_migrations(path.to_str().unwrap());
+        run_migrations(path.to_str().unwrap()).unwrap();
         let pool = create_pool(path.to_str().unwrap());
         let repo = SessionRepository::with_pool(pool);
         repo.create_session(Some("Persisted Session".to_string()))
@@ -16,7 +16,7 @@ async fn database_is_reopenable_and_persists_data() {
     }
 
     {
-        run_migrations(path.to_str().unwrap());
+        run_migrations(path.to_str().unwrap()).unwrap();
         let pool = create_pool(path.to_str().unwrap());
         let repo = SessionRepository::with_pool(pool);
         let sessions = repo.get_all_sessions().await.unwrap();

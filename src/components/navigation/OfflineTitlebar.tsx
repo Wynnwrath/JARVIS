@@ -1,13 +1,25 @@
 import { Shield, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import { useSystemInfo } from '@/hooks/useSystemInfo';
-import { VoiceStatusOrb } from '@/features/chat'; 
+import { VoiceStatusOrb } from '@/features/chat';
+import { getCurrentUser } from '@/services/system.service';
 
 const MotionShield = motion(Shield);
 
 export const OfflineTitlebar = () => {
   const { systemInfo } = useSystemInfo();
-  const formattedTime = systemInfo 
+  const [userInitial, setUserInitial] = useState('U');
+
+  useEffect(() => {
+    getCurrentUser().then((user) => {
+      if (user) {
+        setUserInitial(user.substring(0, 1).toUpperCase());
+      }
+    });
+  }, []);
+
+  const formattedTime = systemInfo
     ? new Date(systemInfo.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '--:--';
 
@@ -100,7 +112,7 @@ export const OfflineTitlebar = () => {
         
         {/* Profile Avatar (Square Technical Style) */}
         <div className="w-9 h-9 bg-offline-surface border border-offline-border flex items-center justify-center text-xs font-mono text-offline-core hover:bg-offline-core hover:text-offline-bg transition-all duration-300 cursor-pointer shadow-inner font-bold">
-          {systemInfo ? systemInfo.username.substring(0, 1).toUpperCase() : 'U'}
+          {userInitial}
         </div>
       </div>
     </header>

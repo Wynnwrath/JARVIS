@@ -1,19 +1,15 @@
-import { useState, useEffect } from 'react';
-import { mediaControls, PlaybackStatus, getMetadata, getPlaybackInfo, isEnabled, getPlaybackStatus, getPosition } from 'tauri-plugin-media-api';
-
-interface PlaybackMetadata {
-  title?: string;
-  artist?: string;
-  album?: string;
-  duration?: number;
-  coverArt?: string;
-}
-
-interface PlaybackInfoResult {
-  isPlaying?: boolean;
-  progress?: number;
-  source?: string;
-}
+import { useState, useEffect, useRef } from 'react';
+import {
+  mediaControls,
+  PlaybackStatus,
+  getMetadata,
+  getPlaybackInfo,
+  isEnabled,
+  getPlaybackStatus,
+  getPosition,
+  type MediaMetadata,
+  type PlaybackInfo,
+} from 'tauri-plugin-media-api';
 
 interface UseMediaSessionReturn {
   isPlaying: boolean;
@@ -38,6 +34,18 @@ export const useMediaSession = (): UseMediaSessionReturn => {
   const [isMediaSupported, setIsMediaSupported] = useState(false);
   const [hasActiveMedia, setHasActiveMedia] = useState(false);
   const [coverArt, setCoverArt] = useState<string | null>(null);
+  const lastPosFromOsRef = useRef(0);
+  const localPosOffsetRef = useRef(0);
+  const lastTrackTitleRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (lastTrackTitleRef.current !== null && lastTrackTitleRef.current !== trackTitle) {
+      lastPosFromOsRef.current = 0;
+      localPosOffsetRef.current = 0;
+      setTrackProgress(0);
+    }
+    lastTrackTitleRef.current = trackTitle;
+  }, [trackTitle]);
 
   useEffect(() => {
     let active = true;
@@ -61,16 +69,14 @@ export const useMediaSession = (): UseMediaSessionReturn => {
     if (isMediaSupported) {
       const interval = setInterval(async () => {
         try {
-          let metadata: PlaybackMetadata | null = null;
+          let metadata: MediaMetadata | null = null;
           try {
-            const md = await getMetadata();
-            if (md && typeof md === 'object') metadata = md as unknown as PlaybackMetadata;
+            metadata = await getMetadata();
           } catch (e: unknown) { console.warn('getMetadata failed:', e); }
 
-          let info: PlaybackInfoResult | null = null;
+          let info: PlaybackInfo | null = null;
           try {
-            const inf = await getPlaybackInfo();
-            if (inf && typeof inf === 'object') info = inf as unknown as PlaybackInfoResult;
+            info = await getPlaybackInfo();
           } catch (e: unknown) {
             const errMsg = String(e);
             if (!errMsg.includes('0x00000000') && !errMsg.includes('completed successfully')) {
@@ -80,36 +86,62 @@ export const useMediaSession = (): UseMediaSessionReturn => {
 
           if (!active) return;
 
-          let statusVal = PlaybackStatus.Stopped;
+          let statusVal: PlaybackStatus = PlaybackStatus.Stopped;
           let posVal = 0;
-          try { statusVal = await getPlaybackStatus(); } catch { /* fallback */ }
-          try { posVal = await getPosition(); } catch { /* fallback */ }
-
-          if (metadata) {
-            if (metadata.title) setTrackTitle(metadata.title);
-            if (metadata.artist) setTrackArtist(metadata.artist);
-            if (metadata.album) setMediaSource(metadata.album);
-            if (metadata.duration) setTrackDuration(Math.round(metadata.duration));
-            if (metadata.coverArt) setCoverArt(metadata.coverArt);
+          if (info) {
+            statusVal = info.status;
+            posVal = info.position ?? 0;
+          } else {
+            try { statusVal = await getPlaybackStatus(); } catch { /* fallback */ }
+            try { posVal = await getPosition(); } catch { /* fallback */ }
           }
 
-          if (info) {
-            if (typeof info.isPlaying === 'boolean') setIsPlaying(info.isPlaying);
-            if (typeof info.progress === 'number') setTrackProgress(Math.round(info.progress));
-            if (info.source) setMediaSource(info.source);
+          if (metadata && (metadata.title || metadata.artist)) {
             setHasActiveMedia(true);
+            setTrackTitle(metadata.title ?? 'Unknown Title');
+            setTrackArtist(metadata.artist ?? 'Unknown Artist');
+
+            if (metadata.duration && metadata.duration > 0) {
+              setTrackDuration(metadata.duration);
+            } else {
+              setTrackDuration(0);
+            }
+
+            setIsPlaying(statusVal === PlaybackStatus.Playing);
+
+            if (posVal > 0) {
+              lastPosFromOsRef.current = posVal;
+              localPosOffsetRef.current = 0;
+              setTrackProgress(posVal);
+            } else if (statusVal === PlaybackStatus.Playing) {
+              localPosOffsetRef.current += 1;
+              setTrackProgress(lastPosFromOsRef.current + localPosOffsetRef.current);
+            } else {
+              localPosOffsetRef.current = 0;
+              setTrackProgress(lastPosFromOsRef.current);
+            }
+
+            if (metadata.artworkData) {
+              const src = metadata.artworkData.startsWith('data:')
+                ? metadata.artworkData
+                : `data:image/png;base64,${metadata.artworkData}`;
+              setCoverArt(src);
+            } else if (metadata.artworkUrl) {
+              setCoverArt(metadata.artworkUrl);
+            } else {
+              setCoverArt(null);
+            }
+
+            if (metadata.albumArtist) {
+              setMediaSource(metadata.albumArtist);
+            } else if (metadata.album) {
+              setMediaSource(metadata.album);
+            } else {
+              setMediaSource('System Player');
+            }
           } else {
             setHasActiveMedia(false);
-            setCoverArt(null);
-          }
-
-          if (statusVal === PlaybackStatus.Playing) setIsPlaying(true);
-          else if (statusVal === PlaybackStatus.Paused) setIsPlaying(false);
-
-          if (posVal > 0) setTrackProgress(Math.round(posVal));
-
-          if (!metadata && statusVal === PlaybackStatus.Stopped) {
-            setHasActiveMedia(false);
+            setIsPlaying(false);
             setCoverArt(null);
           }
         } catch (err: unknown) {
@@ -134,11 +166,29 @@ export const useMediaSession = (): UseMediaSessionReturn => {
 
   const togglePlayPause = async () => {
     try {
-      if (isPlaying) await mediaControls.pause();
-      else await mediaControls.play();
-      setIsPlaying(!isPlaying);
+      await mediaControls.togglePlayPause();
+      let newPlaying = !isPlaying;
+      try {
+        const info = await getPlaybackInfo();
+        if (info) {
+          newPlaying = info.status === PlaybackStatus.Playing;
+        } else {
+          const status = await getPlaybackStatus();
+          newPlaying = status === PlaybackStatus.Playing;
+        }
+      } catch {
+        try {
+          const status = await getPlaybackStatus();
+          newPlaying = status === PlaybackStatus.Playing;
+        } catch { /* keep optimistic flip */ }
+      }
+      setIsPlaying(newPlaying);
     } catch (err: unknown) {
-      console.warn('Toggle play/pause failed:', err);
+      const errMsg = String(err);
+      if (!errMsg.includes('0x00000000') && !errMsg.includes('completed successfully')) {
+        console.warn('Toggle play/pause failed:', err);
+      }
+      setIsPlaying(!isPlaying);
     }
   };
 

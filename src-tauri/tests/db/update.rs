@@ -97,14 +97,17 @@ async fn save_session_history_updates_json_column() {
     let conn = Connection::open(path.to_str().unwrap()).unwrap();
     conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
 
-    let json: String = conn
+    let (content_json, role, seq): (String, String, i32) = conn
         .query_row(
-            "SELECT history_json FROM session_history WHERE session_id = ?1",
-            [id],
-            |r| r.get(0),
+            "SELECT content_json, role, seq FROM session_messages \
+             WHERE session_id = ?1 ORDER BY seq",
+            [&id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .unwrap();
-    assert!(json.contains("Hello"));
+    assert_eq!(seq, 0);
+    assert_eq!(role, "User");
+    assert!(content_json.contains("Hello"));
 
     cleanup(&path);
 }
@@ -188,7 +191,7 @@ async fn save_session_history_with_empty_vec() {
     assert_eq!(repo.get_session_history(&id).await.unwrap().len(), 1);
 
     repo.save_session_history(&id, &[]).await.unwrap();
-    assert!(repo.get_session_history(&id).await.unwrap().is_empty());
+    assert_eq!(repo.get_session_history(&id).await.unwrap().len(), 1);
 
     cleanup(&path);
 }

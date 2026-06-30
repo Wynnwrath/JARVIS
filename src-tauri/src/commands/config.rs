@@ -10,7 +10,7 @@ use tauri::{AppHandle, Manager, State};
 
 /// Returns the full application configuration as a JSON value.
 ///
-/// The config is read from the `tokio::sync::Mutex` managed state (previously loaded
+/// The config is read from the `tokio::sync::RwLock` managed state (previously loaded
 /// from `config.toml` at startup). No synthetic fields (e.g. `vad_threshold`) are injected.
 ///
 /// # Arguments
@@ -27,9 +27,9 @@ use tauri::{AppHandle, Manager, State};
 /// Returns [`AppError::SystemError`] if the config cannot be serialised to JSON.
 #[tauri::command]
 pub async fn get_config(
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
 ) -> Result<serde_json::Value, AppError> {
-    let config_guard = config.lock().await;
+    let config_guard = config.read().await;
     serde_json::to_value(&*config_guard)
         .map_err(|e| AppError::SystemError(format!("Failed to serialize config: {}", e)))
 }
@@ -57,11 +57,11 @@ pub async fn get_config(
 #[tauri::command]
 pub async fn update_config(
     new_config: AppConfig,
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
     app: AppHandle,
 ) -> Result<(), AppError> {
     {
-        let mut config_guard = config.lock().await;
+        let mut config_guard = config.write().await;
         *config_guard = new_config.clone();
     }
 
@@ -73,6 +73,8 @@ pub async fn update_config(
     new_config
         .save_to(&config_path)
         .map_err(|e| AppError::SystemError(format!("Failed to save config: {}", e)))?;
+
+    crate::infrastructure::agent::sandbox::sync_sandbox_roots(&new_config)?;
 
     Ok(())
 }

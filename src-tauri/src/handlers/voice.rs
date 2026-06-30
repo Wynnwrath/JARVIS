@@ -132,7 +132,7 @@ pub fn start_transcription(state: &VoiceState, app: AppHandle) -> Result<(), App
         let mut completed = match lock.lock() {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("Voice watcher: mutex lock failed: {e}");
+                tracing::warn!(error = %e, "voice watcher: mutex lock failed");
                 return;
             }
         };
@@ -140,7 +140,7 @@ pub fn start_transcription(state: &VoiceState, app: AppHandle) -> Result<(), App
             completed = match cvar.wait(completed) {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("Voice watcher: condvar wait failed: {e}");
+                    tracing::warn!(error = %e, "voice watcher: condvar wait failed");
                     return;
                 }
             };
@@ -151,7 +151,7 @@ pub fn start_transcription(state: &VoiceState, app: AppHandle) -> Result<(), App
         let text = match transcript.lock() {
             Ok(t) => t.clone(),
             Err(e) => {
-                eprintln!("Voice watcher: transcript lock failed: {e}");
+                tracing::warn!(error = %e, "voice watcher: transcript lock failed");
                 return;
             }
         };

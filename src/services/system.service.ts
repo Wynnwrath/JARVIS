@@ -4,7 +4,6 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 export interface SystemInfo {
   time: string;
   cpu_temperature: number | null;
-  username: string;
   cpu_usage: number;
   ram_usage: number;
   disk_usage: number;
@@ -134,4 +133,20 @@ export function onTelemetryReceived(
  */
 export function isTelemetryLive(): boolean {
   return telemetryIsLive;
+}
+
+/**
+ * Returns the current OS username, or null if unavailable.
+ */
+export async function getCurrentUser(): Promise<string | null> {
+  if (!isTauri()) {
+    return null;
+  }
+
+  try {
+    return await invoke<string | null>('get_current_user');
+  } catch (err) {
+    console.warn('[SystemService] get_current_user invoke failed:', err);
+    return null;
+  }
 }

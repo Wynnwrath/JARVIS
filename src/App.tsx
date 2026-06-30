@@ -18,6 +18,7 @@ import { OfflineRAGPage } from '@/pages/OfflineRAGPage';
 import { IntroBootSequence } from '@/components/ui/IntroBootSequence';
 import { ModeSwitchTransition } from '@/components/ui/ModeSwitchTransition';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { PermissionPromptOverlay } from '@/features/permission';
 
 import './styles.css';
 
@@ -132,6 +133,9 @@ function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Permission Prompt Overlay (global) */}
+      <PermissionPromptOverlay />
     </div>
   );
 }

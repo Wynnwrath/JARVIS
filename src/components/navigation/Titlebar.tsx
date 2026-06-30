@@ -1,12 +1,22 @@
 import { Search, Activity } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSystemInfo } from '@/hooks/useSystemInfo';
 import { VoiceStatusOrb } from '@/features/chat';
+import { getCurrentUser } from '@/services/system.service';
 
 export const Titlebar = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
   const { systemInfo } = useSystemInfo();
+  const [userInitial, setUserInitial] = useState('U');
+
+  useEffect(() => {
+    getCurrentUser().then((user) => {
+      if (user) {
+        setUserInitial(user.substring(0, 2).toUpperCase());
+      }
+    });
+  }, []);
 
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSearchTerm(e.target.value);
@@ -72,7 +82,7 @@ export const Titlebar = () => {
         {/* User Profile */}
         <div className="flex items-center gap-3 pl-2 border-l border-white/10">
            <div className="rounded-full bg-theme-accent/10 border border-theme-accent/30 w-8 h-8 flex items-center justify-center text-xs font-mono text-theme-accent shadow-[0_0_10px_rgba(var(--theme-accent-rgb),0.1)] hover:bg-theme-accent hover:text-black transition-all duration-300 cursor-pointer">
-            {systemInfo ? systemInfo.username.substring(0, 2).toUpperCase() : 'U'}
+            {userInitial}
           </div>
         </div>
       </div>

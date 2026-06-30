@@ -1,7 +1,9 @@
 use crate::domain::config::AppConfig;
 use crate::domain::errors::AppError;
 use crate::handlers::documents;
-use tauri::State;
+use crate::infrastructure::permission_gate::AppPermissionGate;
+use std::sync::Arc;
+use tauri::{Manager, State};
 
 /// Reads a file inside the sandbox directory, enforcing the configured read extensions.
 ///
@@ -21,13 +23,17 @@ use tauri::State;
 #[tauri::command]
 pub async fn read_document(
     path: String,
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
+    app: tauri::AppHandle,
 ) -> Result<String, AppError> {
-    let (sandbox_dir, read_extensions) = {
-        let guard = config.lock().await;
-        (guard.sandbox_dir.clone(), guard.read_extensions.clone())
+    let read_extensions = {
+        let guard = config.read().await;
+        guard.read_extensions.clone()
     };
-    documents::read_document(&sandbox_dir, read_extensions, path).await
+    let gate: Option<Arc<AppPermissionGate>> = app
+        .try_state::<Arc<AppPermissionGate>>()
+        .map(|s| s.inner().clone());
+    documents::read_document(read_extensions, path, gate).await
 }
 
 /// Writes content to a file inside the sandbox, enforcing write extensions.
@@ -55,13 +61,17 @@ pub async fn write_document(
     path: String,
     content: String,
     append: Option<bool>,
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
+    app: tauri::AppHandle,
 ) -> Result<String, AppError> {
-    let (sandbox_dir, write_extensions) = {
-        let guard = config.lock().await;
-        (guard.sandbox_dir.clone(), guard.write_extensions.clone())
+    let write_extensions = {
+        let guard = config.read().await;
+        guard.write_extensions.clone()
     };
-    documents::write_document(&sandbox_dir, write_extensions, path, content, append).await
+    let gate: Option<Arc<AppPermissionGate>> = app
+        .try_state::<Arc<AppPermissionGate>>()
+        .map(|s| s.inner().clone());
+    documents::write_document(write_extensions, path, content, append, gate).await
 }
 
 /// Lists entries at a path inside the sandbox directory.
@@ -71,7 +81,6 @@ pub async fn write_document(
 /// # Arguments
 ///
 /// * `path` - Optional relative path to list within the sandbox.
-/// * `config` - The application configuration state, injected by Tauri.
 ///
 /// # Returns
 ///
@@ -83,13 +92,12 @@ pub async fn write_document(
 #[tauri::command]
 pub async fn list_directory(
     path: Option<String>,
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
+    app: tauri::AppHandle,
 ) -> Result<String, AppError> {
-    let sandbox_dir = {
-        let guard = config.lock().await;
-        guard.sandbox_dir.clone()
-    };
-    documents::list_directory(&sandbox_dir, path).await
+    let gate: Option<Arc<AppPermissionGate>> = app
+        .try_state::<Arc<AppPermissionGate>>()
+        .map(|s| s.inner().clone());
+    documents::list_directory(path, gate).await
 }
 
 /// Glob-searches for files matching `pattern` inside the sandbox.
@@ -97,7 +105,6 @@ pub async fn list_directory(
 /// # Arguments
 ///
 /// * `pattern` - A glob pattern (e.g. `"**/*.rs"`, `"*.toml"`).
-/// * `config` - The application configuration state, injected by Tauri.
 ///
 /// # Returns
 ///
@@ -108,15 +115,11 @@ pub async fn list_directory(
 ///
 /// Returns [`AppError::SystemError`] if the glob pattern is invalid or the search fails.
 #[tauri::command]
-pub async fn glob_search(
-    pattern: String,
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
-) -> Result<String, AppError> {
-    let sandbox_dir = {
-        let guard = config.lock().await;
-        guard.sandbox_dir.clone()
-    };
-    documents::glob_search(&sandbox_dir, pattern).await
+pub async fn glob_search(pattern: String, app: tauri::AppHandle) -> Result<String, AppError> {
+    let gate: Option<Arc<AppPermissionGate>> = app
+        .try_state::<Arc<AppPermissionGate>>()
+        .map(|s| s.inner().clone());
+    documents::glob_search(pattern, gate).await
 }
 
 /// Grep-searches file contents inside the sandbox for a given query.
@@ -144,11 +147,15 @@ pub async fn grep_search(
     query: String,
     path: Option<String>,
     case_sensitive: Option<bool>,
-    config: State<'_, tokio::sync::Mutex<AppConfig>>,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
+    app: tauri::AppHandle,
 ) -> Result<String, AppError> {
-    let (sandbox_dir, read_extensions) = {
-        let guard = config.lock().await;
-        (guard.sandbox_dir.clone(), guard.read_extensions.clone())
+    let read_extensions = {
+        let guard = config.read().await;
+        guard.read_extensions.clone()
     };
-    documents::grep_search(&sandbox_dir, read_extensions, query, path, case_sensitive).await
+    let gate: Option<Arc<AppPermissionGate>> = app
+        .try_state::<Arc<AppPermissionGate>>()
+        .map(|s| s.inner().clone());
+    documents::grep_search(read_extensions, query, path, case_sensitive, gate).await
 }

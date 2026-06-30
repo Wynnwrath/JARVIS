@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
 import {
   Cpu, MemoryStick, Wifi, WifiOff, Bluetooth, BluetoothOff,
   Volume2, VolumeX, ChevronRight, ChevronLeft,
@@ -7,6 +7,8 @@ import {
   Play, Pause, Volume
 } from 'lucide-react';
 import { useSystemInfo } from '@/hooks/useSystemInfo';
+import { useHardwareControl } from '@/hooks/useHardwareControl';
+import { HardwareToggle } from '@/components/HardwareToggle';
 import { useMediaSession } from './telemetry/hooks/useMediaSession';
 import { PanelPlaceholder } from './telemetry/shared/PanelPlaceholder';
 import { AudioVisualizer } from './telemetry/shared/AudioVisualizer';
@@ -41,37 +43,6 @@ const TelemetryBar = ({ label, value, icon, warning = false }: {
   );
 };
 
-const HardwareToggle = ({ label, enabled, onToggle, iconOn, iconOff }: {
-  label: string; enabled: boolean; onToggle: () => void;
-  iconOn: React.ReactNode; iconOff: React.ReactNode;
-}) => (
-  <button
-    onClick={onToggle}
-    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg border transition-all duration-300 group
-      ${enabled
-        ? 'bg-offline-core/5 border-offline-core/30 hover:bg-offline-core/10'
-        : 'bg-white/[0.02] border-white/5 hover:border-white/15 opacity-50 hover:opacity-70'
-      }`}
-  >
-    <div className={`transition-colors ${enabled ? 'text-offline-core' : 'text-secondary-txt/50'}`}>
-      {enabled ? iconOn : iconOff}
-    </div>
-    <span className={`text-xs font-mono uppercase tracking-wider flex-1 text-left transition-colors
-      ${enabled ? 'text-offline-core' : 'text-secondary-txt/55'}`}>
-      {label}
-    </span>
-    <div className={`w-7 h-3.5 rounded-full relative transition-colors duration-300 border
-      ${enabled ? 'bg-offline-core/20 border-offline-core/50' : 'bg-white/5 border-white/10'}`}>
-      <motion.div
-        animate={{ x: enabled ? 14 : 2 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        className={`w-2.5 h-2.5 rounded-full absolute top-[1px] transition-colors duration-300
-          ${enabled ? 'bg-offline-core shadow-[0_0_6px_var(--color-offline-core)]' : 'bg-secondary-txt/40'}`}
-      />
-    </div>
-  </button>
-);
-
 interface OfflineTelemetryHUDProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -83,39 +54,76 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
 
   const {
     isPlaying, trackTitle, trackArtist, trackProgress, trackDuration,
-    coverArt, isMediaSupported, hasActiveMedia, togglePlayPause,
+    coverArt, isMediaSupported, hasActiveMedia, mediaSource, togglePlayPause,
   } = useMediaSession();
+
+  const sourceBadge = (
+    <span className="ml-auto text-[8px] font-mono text-offline-core/50 uppercase tracking-widest bg-offline-core/5 border border-offline-core/10 px-1.5 py-0.5 rounded">
+      {isMediaSupported && !hasActiveMedia ? 'Inactive' : mediaSource}
+    </span>
+  );
 
   const cpu = systemInfo ? Math.round(systemInfo.cpu_usage) : 0;
   const ram = systemInfo ? Math.round(systemInfo.ram_usage) : 0;
   const disk = systemInfo ? Math.round(systemInfo.disk_usage) : 0;
   const temp = systemInfo?.cpu_temperature ? Math.round(systemInfo.cpu_temperature) : 0;
 
-  const [volume, setVolume] = useState(65);
-  const [wifiEnabled, setWifiEnabled] = useState(false);
-  const [btEnabled, setBtEnabled] = useState(false);
+  const { hardwareState, isLoading, isSupported, error, clearError, setInteracting, setVolume, setWifi, setBluetooth } = useHardwareControl();
+
+  const isDraggingRef = useRef(false);
+  const [sliderVolume, setSliderVolume] = useState(hardwareState.volume.level);
+
+  useEffect(() => {
+    if (!isDraggingRef.current) {
+      setSliderVolume(hardwareState.volume.level);
+    }
+  }, [hardwareState.volume.level]);
+
+  useEffect(() => {
+    if (error && isDraggingRef.current) {
+      setSliderVolume(hardwareState.volume.level);
+    }
+  }, [error, hardwareState.volume.level]);
 
   const [isCpuFloated, setIsCpuFloated] = useState(false);
   const [isControlFloated, setIsControlFloated] = useState(false);
   const [isSpotifyFloated, setIsSpotifyFloated] = useState(false);
   const [panelOrder, setPanelOrder] = useState<string[]>(['cpu', 'control', 'spotify']);
 
+  const cpuDragControls = useDragControls();
+  const spotifyDragControls = useDragControls();
+  const controlDragControls = useDragControls();
+  const [cpuPos, setCpuPos] = useState({ x: typeof window !== 'undefined' ? window.innerWidth - 608 : 800, y: 96 });
+  const [spotifyPos, setSpotifyPos] = useState({ x: typeof window !== 'undefined' ? window.innerWidth - 608 : 800, y: 352 });
+  const [controlPos, setControlPos] = useState({ x: typeof window !== 'undefined' ? window.innerWidth - 608 : 800, y: typeof window !== 'undefined' ? window.innerHeight - 384 : 500 });
+
+  const cpuDragStartPos = useRef({ x: 0, y: 0 });
+  const spotifyDragStartPos = useRef({ x: 0, y: 0 });
+  const controlDragStartPos = useRef({ x: 0, y: 0 });
+
   const formatTime = (secs: number) => {
+    if (secs < 0) return '0:00';
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   const formatDuration = (secs: number) => {
+    if (secs <= 0) return '--:--';
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const progressPercent = trackDuration > 0 ? (trackProgress / trackDuration) * 100 : 0;
+  const durationKnown = trackDuration > 0;
+  const progressPercent = durationKnown ? Math.min(100, (trackProgress / trackDuration) * 100) : 0;
+  const showLiveShimmer = !durationKnown && isPlaying && hasActiveMedia;
 
-  const renderPanelHeader = (title: string, icon: React.ReactNode, isFloated: boolean, onFloat: () => void, onDock: () => void) => (
-    <div className={`flex items-center gap-2 mb-3 select-none ${isFloated ? 'cursor-grab active:cursor-grabbing bg-black/10 -mx-4 -mt-4 p-4 border-b border-white/5' : ''}`}>
+  const renderPanelHeader = (title: string, icon: React.ReactNode, isFloated: boolean, onFloat: () => void, onDock: () => void, dragControls?: ReturnType<typeof useDragControls>, badge?: React.ReactNode) => (
+    <div
+      className={`flex items-center gap-2 mb-3 select-none ${isFloated ? 'cursor-grab active:cursor-grabbing bg-black/10 -mx-4 -mt-4 p-4 border-b border-white/5' : ''}`}
+      onPointerDown={isFloated && dragControls ? (e) => { e.preventDefault(); dragControls.start(e); } : undefined}
+    >
       {isFloated ? (
         <GripVertical size={14} className="text-secondary-txt/45" />
       ) : (
@@ -127,16 +135,60 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
         </>
       )}
       <h3 className="text-xs font-mono uppercase tracking-[0.15em] text-offline-core/80 font-bold">{title}</h3>
+      {badge}
       {isFloated ? (
-        <button onClick={(e) => { e.stopPropagation(); onDock(); }} className="ml-auto text-secondary-txt/60 hover:text-error-red transition-colors p-1 rounded hover:bg-white/5 cursor-pointer" title="Dock Panel">
+        <button onClick={(e) => { e.stopPropagation(); onDock(); }} className={`${badge ? 'ml-2' : 'ml-auto'} text-secondary-txt/60 hover:text-error-red transition-colors p-1 rounded hover:bg-white/5 cursor-pointer`} title="Dock Panel">
           <X size={14} />
         </button>
       ) : (
-        <button onClick={onFloat} className="ml-auto text-secondary-txt/40 hover:text-offline-core transition-colors p-1 rounded hover:bg-white/5 cursor-pointer" title="Float Panel">
+        <button onClick={onFloat} className={`${badge ? 'ml-2' : 'ml-auto'} text-secondary-txt/40 hover:text-offline-core transition-colors p-1 rounded hover:bg-white/5 cursor-pointer`} title="Float Panel">
           <ExternalLink size={12} />
         </button>
       )}
     </div>
+  );
+
+  const volumeSliderDisabled = !hardwareState.volume.available || isLoading;
+
+  const volumeSliderContent = (
+    <>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-2 text-xs font-mono text-secondary-txt/80 uppercase tracking-wider">
+            {sliderVolume === 0 ? <VolumeX size={12} className="text-error-red" /> : <Volume2 size={12} className="text-offline-core" />}
+            System Vol
+          </span>
+          <span className="text-xs font-mono font-bold text-offline-core">{sliderVolume}%</span>
+        </div>
+        <div className="relative group">
+          <div className="h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
+            <div className="h-full bg-gradient-to-r from-offline-core/40 to-offline-core rounded-full" style={{ width: `${sliderVolume}%` }} />
+          </div>
+          <input
+            type="range" min={0} max={100} step={1} value={sliderVolume}
+            onChange={(e) => setSliderVolume(parseInt(e.target.value))}
+            onPointerDown={() => { isDraggingRef.current = true; setInteracting(true); }}
+            onPointerUp={() => { isDraggingRef.current = false; setVolume(sliderVolume); setInteracting(false); clearError(); }}
+            onPointerLeave={() => { if (isDraggingRef.current) { isDraggingRef.current = false; setVolume(sliderVolume); setInteracting(false); clearError(); } }}
+            disabled={volumeSliderDisabled}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-offline-core shadow-[0_0_10px_rgba(244,244,245,0.4)] pointer-events-none group-hover:scale-125 transition-transform" style={{ left: `calc(${sliderVolume}% - 6px)` }} />
+        </div>
+      </div>
+      <div className="space-y-2 pt-2 border-t border-white/5">
+        <HardwareToggle label="Wi-Fi" enabled={hardwareState.wifi.enabled} onToggle={() => setWifi(!hardwareState.wifi.enabled)} iconOn={<Wifi size={14} />} iconOff={<WifiOff size={14} />} disabled={!hardwareState.wifi.available || isLoading} />
+        <HardwareToggle label="Bluetooth" enabled={hardwareState.bluetooth.enabled} onToggle={() => setBluetooth(!hardwareState.bluetooth.enabled)} iconOn={<Bluetooth size={14} />} iconOff={<BluetoothOff size={14} />} disabled={!hardwareState.bluetooth.available || isLoading} />
+      </div>
+    </>
+  );
+
+  const notSupportedFootnote = !isSupported && (
+    <p className="text-[10px] font-mono text-secondary-txt/55 pt-2">Hardware controls unavailable: Tauri backend not reachable.</p>
+  );
+
+  const errorDisplay = error && (
+    <p className="text-[10px] font-mono text-error-red pt-2">{error}</p>
   );
 
   return (
@@ -158,11 +210,23 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="fixed top-24 right-[20rem] z-40 w-72 bg-offline-surface-dark border border-offline-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md overflow-hidden pointer-events-auto flex flex-col"
-            style={{ resize: 'both', minWidth: '260px', minHeight: '200px', maxWidth: '480px', maxHeight: '500px' }}
+            className="fixed z-40 w-72 bg-offline-surface-dark border border-offline-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md overflow-hidden pointer-events-auto flex flex-col"
+            style={{ left: cpuPos.x, top: cpuPos.y, resize: 'both', minWidth: '260px', minHeight: '200px', maxWidth: '480px', maxHeight: '500px' }}
+            drag
+            dragListener={false}
+            dragControls={cpuDragControls}
+            dragConstraints={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            dragElastic={0}
+            dragMomentum={false}
+            onDragStart={() => { cpuDragStartPos.current = cpuPos; }}
+            onDrag={(_, info) => {
+              const x = Math.max(0, Math.min(window.innerWidth - 288, cpuDragStartPos.current.x + info.offset.x));
+              const y = Math.max(0, Math.min(window.innerHeight - 100, cpuDragStartPos.current.y + info.offset.y));
+              setCpuPos({ x, y });
+            }}
           >
             <div className="p-4 h-full flex flex-col overflow-hidden">
-              {renderPanelHeader('Hardware_Telemetry', <Activity size={12} className="text-offline-core/60" />, true, () => {}, () => setIsCpuFloated(false))}
+              {renderPanelHeader('Hardware_Telemetry', <Activity size={12} className="text-offline-core/60" />, true, () => {}, () => setIsCpuFloated(false), cpuDragControls)}
               <div className="space-y-4 bg-black/20 border border-white/5 rounded-lg p-3 flex-1 overflow-y-auto custom-scrollbar">
                 <TelemetryBar label="CPU" value={cpu} icon={<Cpu size={12} />} warning={cpu > 85} />
                 <TelemetryBar label="RAM" value={ram} icon={<MemoryStick size={12} />} warning={ram > 90} />
@@ -183,11 +247,23 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="fixed top-[22rem] right-[20rem] z-40 w-72 bg-offline-surface-dark border border-offline-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md overflow-hidden pointer-events-auto flex flex-col"
-            style={{ resize: 'both', minWidth: '260px', minHeight: '160px', maxWidth: '480px', maxHeight: '500px' }}
+            className="fixed z-40 w-72 bg-offline-surface-dark border border-offline-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md overflow-hidden pointer-events-auto flex flex-col"
+            style={{ left: spotifyPos.x, top: spotifyPos.y, resize: 'both', minWidth: '260px', minHeight: '160px', maxWidth: '480px', maxHeight: '500px' }}
+            drag
+            dragListener={false}
+            dragControls={spotifyDragControls}
+            dragConstraints={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            dragElastic={0}
+            dragMomentum={false}
+            onDragStart={() => { spotifyDragStartPos.current = spotifyPos; }}
+            onDrag={(_, info) => {
+              const x = Math.max(0, Math.min(window.innerWidth - 288, spotifyDragStartPos.current.x + info.offset.x));
+              const y = Math.max(0, Math.min(window.innerHeight - 100, spotifyDragStartPos.current.y + info.offset.y));
+              setSpotifyPos({ x, y });
+            }}
           >
             <div className="p-4 h-full flex flex-col overflow-hidden">
-              {renderPanelHeader('Media_Monitor', <Music size={12} className="text-offline-core/60" />, true, () => {}, () => setIsSpotifyFloated(false))}
+              {renderPanelHeader('Media_Monitor', <Music size={12} className="text-offline-core/60" />, true, () => {}, () => setIsSpotifyFloated(false), spotifyDragControls, sourceBadge)}
               <div className="bg-black/20 border border-white/5 rounded-lg p-3 space-y-3 flex-1">
                 <MediaContent
                   isMediaSupported={isMediaSupported} hasActiveMedia={hasActiveMedia}
@@ -195,6 +271,7 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
                   trackTitle={trackTitle} trackArtist={trackArtist}
                   trackProgress={trackProgress} trackDuration={trackDuration}
                   progressPercent={progressPercent}
+                  durationKnown={durationKnown} showLiveShimmer={showLiveShimmer}
                   togglePlayPause={togglePlayPause}
                   formatTime={formatTime} formatDuration={formatDuration}
                 />
@@ -210,32 +287,27 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="fixed bottom-24 right-[20rem] z-40 w-72 bg-offline-surface-dark border border-offline-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md overflow-hidden pointer-events-auto flex flex-col"
-            style={{ resize: 'both', minWidth: '260px', minHeight: '220px', maxWidth: '480px', maxHeight: '500px' }}
+            className="fixed z-40 w-72 bg-offline-surface-dark border border-offline-border rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md overflow-hidden pointer-events-auto flex flex-col"
+            style={{ left: controlPos.x, top: controlPos.y, resize: 'both', minWidth: '260px', minHeight: '220px', maxWidth: '480px', maxHeight: '500px' }}
+            drag
+            dragListener={false}
+            dragControls={controlDragControls}
+            dragConstraints={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            dragElastic={0}
+            dragMomentum={false}
+            onDragStart={() => { controlDragStartPos.current = controlPos; }}
+            onDrag={(_, info) => {
+              const x = Math.max(0, Math.min(window.innerWidth - 288, controlDragStartPos.current.x + info.offset.x));
+              const y = Math.max(0, Math.min(window.innerHeight - 100, controlDragStartPos.current.y + info.offset.y));
+              setControlPos({ x, y });
+            }}
           >
             <div className="p-4 h-full flex flex-col overflow-hidden">
-              {renderPanelHeader('Control_Deck', <Volume2 size={12} className="text-offline-core/60" />, true, () => {}, () => setIsControlFloated(false))}
+              {renderPanelHeader('Control_Deck', <Volume2 size={12} className="text-offline-core/60" />, true, () => {}, () => setIsControlFloated(false), controlDragControls)}
               <div className="bg-black/20 border border-white/5 rounded-lg p-3 space-y-3 flex-1 overflow-y-auto custom-scrollbar">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-xs font-mono text-secondary-txt/80 uppercase tracking-wider">
-                      {volume === 0 ? <VolumeX size={12} className="text-error-red" /> : <Volume2 size={12} className="text-offline-core" />}
-                      System Vol
-                    </span>
-                    <span className="text-xs font-mono font-bold text-offline-core">{volume}%</span>
-                  </div>
-                  <div className="relative group">
-                    <div className="h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                      <div className="h-full bg-gradient-to-r from-offline-core/40 to-offline-core rounded-full transition-all duration-100" style={{ width: `${volume}%` }} />
-                    </div>
-                    <input type="range" min={0} max={100} step={1} value={volume} onChange={(e) => setVolume(parseInt(e.target.value))} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                    <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-offline-core shadow-[0_0_10px_rgba(244,244,245,0.4)] pointer-events-none group-hover:scale-125 transition-transform" style={{ left: `calc(${volume}% - 6px)` }} />
-                  </div>
-                </div>
-                <div className="space-y-2 pt-2 border-t border-white/5">
-                  <HardwareToggle label="Wi-Fi" enabled={wifiEnabled} onToggle={() => setWifiEnabled(!wifiEnabled)} iconOn={<Wifi size={14} />} iconOff={<WifiOff size={14} />} />
-                  <HardwareToggle label="Bluetooth" enabled={btEnabled} onToggle={() => setBtEnabled(!btEnabled)} iconOn={<Bluetooth size={14} />} iconOff={<BluetoothOff size={14} />} />
-                </div>
+                {volumeSliderContent}
+                {notSupportedFootnote}
+                {errorDisplay}
               </div>
             </div>
             <div className="absolute bottom-1 right-1 w-2.5 h-2.5 border-r-2 border-b-2 border-offline-core/25 pointer-events-none rounded-br-sm" />
@@ -286,25 +358,9 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
                           <div>
                             {renderPanelHeader('Control_Deck', <Volume2 size={12} className="text-offline-core/60" />, false, () => setIsControlFloated(true), () => {})}
                             <div className="bg-black/20 border border-white/5 rounded-lg p-3 space-y-3">
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="flex items-center gap-2 text-xs font-mono text-secondary-txt/80 uppercase tracking-wider">
-                                    {volume === 0 ? <VolumeX size={12} className="text-error-red" /> : <Volume2 size={12} className="text-offline-core" />} System Vol
-                                  </span>
-                                  <span className="text-xs font-mono font-bold text-offline-core">{volume}%</span>
-                                </div>
-                                <div className="relative group">
-                                  <div className="h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                                    <div className="h-full bg-gradient-to-r from-offline-core/40 to-offline-core rounded-full transition-all duration-100" style={{ width: `${volume}%` }} />
-                                  </div>
-                                  <input type="range" min={0} max={100} step={1} value={volume} onChange={(e) => setVolume(parseInt(e.target.value))} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                                  <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-offline-core shadow-[0_0_10px_rgba(244,244,245,0.4)] pointer-events-none group-hover:scale-125 transition-transform" style={{ left: `calc(${volume}% - 6px)` }} />
-                                </div>
-                              </div>
-                              <div className="space-y-2 pt-2 border-t border-white/5">
-                                <HardwareToggle label="Wi-Fi" enabled={wifiEnabled} onToggle={() => setWifiEnabled(!wifiEnabled)} iconOn={<Wifi size={14} />} iconOff={<WifiOff size={14} />} />
-                                <HardwareToggle label="Bluetooth" enabled={btEnabled} onToggle={() => setBtEnabled(!btEnabled)} iconOn={<Bluetooth size={14} />} iconOff={<BluetoothOff size={14} />} />
-                              </div>
+                              {volumeSliderContent}
+                              {notSupportedFootnote}
+                              {errorDisplay}
                             </div>
                           </div>
                         )}
@@ -318,7 +374,7 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
                           <PanelPlaceholder icon={<Music size={18} />} title="Media_Floated" description="Panel is in floating mode" buttonText="[Dock_Back]" onAction={() => setIsSpotifyFloated(false)} />
                         ) : (
                           <div>
-                            {renderPanelHeader('Media_Monitor', <Music size={12} className="text-offline-core/60" />, false, () => setIsSpotifyFloated(true), () => {})}
+                            {renderPanelHeader('Media_Monitor', <Music size={12} className="text-offline-core/60" />, false, () => setIsSpotifyFloated(true), () => {}, undefined, sourceBadge)}
                             <div className="bg-black/20 border border-white/5 rounded-lg p-3 space-y-3">
                               <MediaContent
                                 isMediaSupported={isMediaSupported} hasActiveMedia={hasActiveMedia}
@@ -326,6 +382,7 @@ export const OfflineTelemetryHUD = ({ isOpen, onToggle }: OfflineTelemetryHUDPro
                                 trackTitle={trackTitle} trackArtist={trackArtist}
                                 trackProgress={trackProgress} trackDuration={trackDuration}
                                 progressPercent={progressPercent}
+                                durationKnown={durationKnown} showLiveShimmer={showLiveShimmer}
                                 togglePlayPause={togglePlayPause}
                                 formatTime={formatTime} formatDuration={formatDuration}
                               />
@@ -366,6 +423,8 @@ interface MediaContentProps {
   trackProgress: number;
   trackDuration: number;
   progressPercent: number;
+  durationKnown: boolean;
+  showLiveShimmer: boolean;
   togglePlayPause: () => void;
   formatTime: (secs: number) => string;
   formatDuration: (secs: number) => string;
@@ -374,6 +433,7 @@ interface MediaContentProps {
 const MediaContent = ({
   isMediaSupported, hasActiveMedia, isPlaying, coverArt,
   trackTitle, trackArtist, trackProgress, trackDuration, progressPercent,
+  durationKnown, showLiveShimmer,
   togglePlayPause, formatTime, formatDuration
 }: MediaContentProps) => (
   <>
@@ -416,16 +476,26 @@ const MediaContent = ({
         </p>
       </div>
       <div className="h-16 flex items-center shrink-0">
-        <AudioVisualizer barCount={6} />
+        <AudioVisualizer barCount={6} isPlaying={isPlaying && hasActiveMedia} />
       </div>
     </div>
     <div className="space-y-1.5 pt-1">
       <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden border border-white/10 relative">
-        <div className="h-full bg-gradient-to-r from-offline-core/60 to-offline-core rounded-full shadow-[0_0_8px_rgba(244,244,245,0.3)]" style={{ width: `${progressPercent}%` }} />
+        {durationKnown ? (
+          <div className="h-full bg-gradient-to-r from-offline-core/60 to-offline-core rounded-full shadow-[0_0_8px_rgba(244,244,245,0.3)]" style={{ width: `${progressPercent}%` }} />
+        ) : (
+          <>
+            <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-offline-core/60 to-offline-core rounded-full shadow-[0_0_8px_rgba(244,244,245,0.3)]" style={{ animation: showLiveShimmer ? 'var(--animate-media-shimmer)' : 'none' }} />
+            {showLiveShimmer && <div className="absolute inset-0 bg-offline-core/5 animate-pulse" />}
+          </>
+        )}
       </div>
       <div className="flex items-center justify-between text-[8px] font-mono text-secondary-txt/70 font-bold tracking-wider">
         <span>{formatTime(trackProgress)}</span>
-        <span>{formatDuration(trackDuration)}</span>
+        <span className="flex items-center gap-1">
+          {showLiveShimmer && <span className="w-1 h-1 rounded-full bg-offline-core animate-pulse" />}
+          {formatDuration(trackDuration)}
+        </span>
       </div>
     </div>
   </>

@@ -1,3 +1,10 @@
+export type StreamEvent =
+  | { type: 'text'; delta: string }
+  | { type: 'reasoning'; id: string; delta: string; is_final: boolean }
+  | { type: 'tool_call_start'; id: string; name: string }
+  | { type: 'tool_call_delta'; id: string; args_delta: string }
+  | { type: 'tool_call_end'; id: string; args: string };
+
 export interface ChatResponse {
   message: string;
   provider: string;
@@ -45,7 +52,6 @@ export interface AppConfig {
   api_key: string;
   chat_model: string;
   chat_base_url: string;
-  vad_threshold: number;
   silence_threshold_rms: number;
   silence_duration_ms: number;
   transcription_model_path: string;
@@ -55,6 +61,25 @@ export interface AppConfig {
   compaction_threshold: number;
   mcp_config_path: string;
   sandbox_dir: string;
+  sandbox_roots: string[];
   read_extensions: string[];
   write_extensions: string[];
+}
+
+export interface PermissionRequest {
+  request_id: string;
+  tool_name: string;
+  description: string;
+}
+
+export type PermissionResponse =
+  | { kind: 'allow' }
+  | { kind: 'deny'; reason: string }
+  | { kind: 'allow_always'; path?: string | null }
+  | { kind: 'deny_always'; path?: string | null };
+
+export interface PermissionPreference {
+  tool_name: string;
+  decision: 'allow' | 'deny';
+  path_pattern?: string | null;
 }

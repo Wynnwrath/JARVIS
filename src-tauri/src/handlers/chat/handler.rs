@@ -1,10 +1,15 @@
-use crate::domain::config::{AppConfig, Providers};
+use super::history::{
+    assistant_message_text, deduplicate_consecutive_assistant_messages,
+    prepare_prompt_with_attachments, update_history_with_clean_user_message,
+};
+use crate::domain::chat::StreamEvent;
+use crate::domain::config::AppConfig;
 use crate::domain::errors::AppError;
 use crate::infrastructure::agent::AGENT_MANAGER;
 use crate::infrastructure::database::SessionRepository;
+use agent_rs_lib::agent::memory::tokenizer;
 use rig_core::message::{AssistantContent, Message, UserContent};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 /// Per-session lock that serialises load→agent→save critical sections.
@@ -72,6 +77,8 @@ pub async fn send_prompt(
 
     repo.save_session_history(session_id, &history).await?;
 
+    maybe_compact(session_id, &history, config, repo).await;
+
     Ok(response)
 }
 
@@ -96,59 +103,6 @@ pub async fn send_prompt(
 /// # Returns
 ///
 /// Returns the assistant's final response text on success, or an [`AppError`] on failure.
-fn assistant_message_text(
-    content: &rig_core::OneOrMany<rig_core::message::AssistantContent>,
-) -> String {
-    content
-        .iter()
-        .filter_map(|item| match item {
-            rig_core::message::AssistantContent::Text(t) => Some(t.text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn deduplicate_consecutive_assistant_messages(history: Vec<Message>) -> Vec<Message> {
-    let mut result: Vec<Message> = Vec::new();
-    for msg in history {
-        if let Message::Assistant { content, .. } = &msg {
-            if let Some(Message::Assistant {
-                content: prev_content,
-                ..
-            }) = result.last()
-            {
-                let prev_text = assistant_message_text(prev_content);
-                let curr_text = assistant_message_text(content);
-                if prev_text == curr_text {
-                    let prev_has_tools = prev_content.iter().any(|item| {
-                        matches!(item, rig_core::message::AssistantContent::ToolCall(_))
-                    });
-                    let curr_has_tools = content.iter().any(|item| {
-                        matches!(item, rig_core::message::AssistantContent::ToolCall(_))
-                    });
-                    if curr_has_tools != prev_has_tools {
-                        // One has tools, the other doesn't — keep the one with tools
-                        // (richer context). If curr is the one with tools, replace
-                        // prev; if prev is the one with tools, keep prev and skip curr.
-                        if curr_has_tools {
-                            result.pop();
-                            result.push(msg);
-                        }
-                    } else if prev_has_tools && curr_has_tools {
-                        // Both have tool calls — may represent distinct tool invocations.
-                        result.push(msg);
-                    }
-                    // else: neither has tools — identical text-only duplicate, skip curr.
-                    continue;
-                }
-            }
-        }
-        result.push(msg);
-    }
-    result
-}
-
 pub async fn send_stream_prompt(
     session_id: &str,
     input: &str,
@@ -156,7 +110,7 @@ pub async fn send_stream_prompt(
     config: &AppConfig,
     repo: &SessionRepository,
     app: Option<&tauri::AppHandle>,
-    channel: tauri::ipc::Channel<String>,
+    channel: tauri::ipc::Channel<StreamEvent>,
 ) -> Result<String, AppError> {
     let lock = acquire_session_lock(session_id).await;
     let _guard = lock.lock().await;
@@ -169,9 +123,7 @@ pub async fn send_stream_prompt(
         .send_stream_prompt(&prompt_with_attachments, &history, config, app, &channel)
         .await?;
 
-    let final_response = if let Some(rig_core::message::Message::Assistant { content, .. }) =
-        updated_history.last()
-    {
+    let final_response = if let Some(Message::Assistant { content, .. }) = updated_history.last() {
         if let Some(text) = content.iter().find_map(|item| match item {
             AssistantContent::Text(t) => Some(t.text.clone()),
             _ => None,
@@ -196,112 +148,100 @@ pub async fn send_stream_prompt(
     repo.save_session_history(session_id, &updated_history)
         .await?;
 
+    maybe_compact(session_id, &updated_history, config, repo).await;
+
     Ok(final_response)
 }
 
-/// Returns the list of all supported LLM provider names as strings.
+/// Compact session history when it exceeds the configured threshold.
 ///
-/// These values are safe to pass to [`set_provider`] and to the Tauri
-/// [`set_chat_provider`](crate::commands::chat::set_chat_provider) command.
-///
-/// # Returns
-///
-/// Returns a vector containing `"openai"`, `"gemini"`, and `"anthropic"`.
-pub fn get_providers() -> Result<Vec<String>, AppError> {
-    Ok(Providers::all()
-        .into_iter()
-        .map(|p| p.to_string())
-        .collect())
-}
-
-/// Switches the active provider in the config mutex and persists to disk.
-///
-/// The lock is released before the file write to avoid blocking concurrent readers.
-///
-/// # Arguments
-///
-/// * `provider` - The provider name to activate (`"openai"`, `"gemini"`, or `"anthropic"`).
-/// * `config` - The `tokio::sync::Mutex`-guarded application configuration.
-/// * `config_path` - Optional filesystem path to persist the updated config to.
-///   When `None`, the config is updated in memory only.
-///
-/// # Returns
-///
-/// Returns `Ok(())` on success, or an [`AppError`] on failure.
-///
-/// # Errors
-///
-/// Returns [`AppError::SystemError`] if the provider name is unknown or the config
-/// file cannot be written.
-pub async fn set_provider(
-    provider: String,
-    config: &tokio::sync::Mutex<AppConfig>,
-    config_path: Option<&Path>,
-) -> Result<(), AppError> {
-    let provider_enum = provider
-        .parse::<Providers>()
-        .map_err(AppError::SystemError)?;
-
-    let config_to_save = {
-        let mut config_guard = config.lock().await;
-        config_guard.provider = provider_enum;
-        config_guard.clone()
-    };
-
-    if let Some(path) = config_path {
-        config_to_save
-            .save_to(path)
-            .map_err(|e| AppError::SystemError(format!("Failed to save config: {}", e)))?;
-    }
-
-    Ok(())
-}
-
-fn prepare_prompt_with_attachments(input: &str, attachments: Option<&[String]>) -> String {
-    let mut prompt = String::new();
-    if let Some(paths) = attachments {
-        for path in paths {
-            prompt.push_str(&format!(
-                "[Attached Document: {}]\nUse the 'read_document' tool to read this file if you need to access its contents.\n\n",
-                path
-            ));
-        }
-    }
-    prompt.push_str(input);
-    prompt
-}
-
-fn update_history_with_clean_user_message(
-    history: &mut [Message],
-    input: &str,
-    attachments: Option<&[String]>,
+/// Triggers asynchronously (fire-and-forget) so the chat response is not delayed.
+/// When triggered, older messages are summarised into a single system message and
+/// the compacted history replaces the originals.
+async fn maybe_compact(
+    session_id: &str,
+    history: &[Message],
+    config: &AppConfig,
+    repo: &SessionRepository,
 ) {
-    let Some(paths) = attachments else {
+    if count_history_tokens(history) <= config.compaction_threshold {
         return;
-    };
-    if paths.is_empty() {
+    }
+    if history.len() <= KEEP_RECENT {
         return;
     }
 
-    // Search from the end of the history for the user message that has the attachments metadata
-    for msg in history.iter_mut().rev() {
-        if let Message::User { content } = msg {
-            let is_attachment_msg = match content.first_ref() {
-                UserContent::Text(text_content) => {
-                    text_content.text.starts_with("[Attached Document:")
-                }
-                _ => false,
-            };
+    let split = history.len() - KEEP_RECENT;
 
-            if is_attachment_msg {
-                let mut clean_text = String::new();
-                for path in paths {
-                    clean_text.push_str(&format!("[Attached: {}]\n", path));
-                }
-                clean_text.push_str(input);
-                *msg = Message::user(&clean_text);
-                break;
+    let has_system_prefix = matches!(history.first(), Some(Message::System { .. }));
+    let to_summarise = if has_system_prefix && split >= 1 {
+        &history[1..split]
+    } else {
+        &history[..split]
+    };
+
+    if to_summarise.is_empty() {
+        return;
+    }
+
+    let mut summary_parts: Vec<String> = Vec::new();
+    for msg in to_summarise {
+        let (role, text) = match msg {
+            Message::User { content } => {
+                let t = content
+                    .iter()
+                    .filter_map(|c| match c {
+                        UserContent::Text(t) => Some(t.text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                ("User", t)
             }
+            Message::Assistant { content, .. } => ("Assistant", assistant_message_text(content)),
+            _ => continue,
+        };
+        if !text.is_empty() {
+            summary_parts.push(format!("{}: {}", role, text));
         }
     }
+
+    let summary_text = format!(
+        "[Context compacted — summarising {} earlier messages]\n{}",
+        to_summarise.len(),
+        summary_parts.join("\n")
+    );
+
+    let summary_msg = Message::system(&summary_text);
+
+    let up_to_seq = (split - 1) as i32;
+    if let Err(e) = repo
+        .compact_session_history(session_id, &summary_msg, up_to_seq)
+        .await
+    {
+        tracing::warn!(error = %e, session_id, "compaction failed");
+    }
+}
+
+const KEEP_RECENT: usize = 20;
+
+fn count_history_tokens(history: &[Message]) -> usize {
+    history
+        .iter()
+        .map(|msg| {
+            let text = match msg {
+                Message::User { content, .. } => content
+                    .iter()
+                    .filter_map(|c| match c {
+                        UserContent::Text(t) => Some(t.text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                Message::Assistant { content, .. } => assistant_message_text(content),
+                Message::System { content, .. } => content.clone(),
+            };
+            tokenizer::count_string_tokens(&text)
+        })
+        .sum()
 }

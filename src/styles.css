@@ -43,10 +43,16 @@
     
     /* 6. Animations */
     --animate-scanline: scanline 8s linear infinite;
+    --animate-media-shimmer: mediaShimmer 1.6s ease-in-out infinite;
 
     @keyframes scanline {
         from { transform: translateY(0); }
         to { transform: translateY(100vh); }
+    }
+
+    @keyframes mediaShimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(400%); }
     }
 }
 

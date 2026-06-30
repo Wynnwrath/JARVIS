@@ -8,6 +8,8 @@ import { VoiceStatusOrb } from './VoiceStatusOrb';
 import { streamPrompt, countTokens, createSession } from '@/services/chatService';
 import { useNeuralFrequency } from '@/hooks/useNeuralFrequency';
 import { VoiceWaveform, AttachedFileChips, useFileAttachments, useTokenCount, useAutoSendTranscript } from '@/features/prompt';
+import { reduceStreamEvent } from '@/features/chat';
+import { markLastTextDone } from '@/features/chat/streamingReducer';
 
 export const OnlinePromptOverlay = () => {
   const { status, transcript, startListening, stopListening, setStatus } = useVoice(); 
@@ -59,13 +61,13 @@ export const OnlinePromptOverlay = () => {
     const userMsg: Message = { 
       id: userId, 
       sender: 'user', 
-      text: displayMessage,
+      parts: [{ kind: 'text', content: displayMessage }],
       tokenCount: userTokensCount
     };
     const assistantMsg: Message = {
       id: assistantId,
       sender: 'jarvis',
-      text: ''
+      parts: [],
     };
 
     setMessages(prev => [...prev, userMsg, assistantMsg]);
@@ -84,16 +86,14 @@ export const OnlinePromptOverlay = () => {
         setSessionId(sid);
       }
       
-      let accumulatedText = '';
-      let hasTokens = false;
+      let hasEvents = false;
 
-      const response = await streamPrompt(sid, textToSend, paths, (token) => {
-        if (!hasTokens) {
+      const response = await streamPrompt(sid, textToSend, paths, (ev) => {
+        if (!hasEvents) {
           setStatus('IDLE');
-          hasTokens = true;
+          hasEvents = true;
         }
-        accumulatedText += token;
-        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, text: accumulatedText } : m));
+        setMessages(prev => prev.map(m => m.id === assistantId ? reduceStreamEvent(m, ev) : m));
       });
       
       let finalPromptTokens = userTokensCount;
@@ -112,7 +112,12 @@ export const OnlinePromptOverlay = () => {
           return { ...m, tokenCount: finalPromptTokens };
         }
         if (m.id === assistantId) {
-          return { ...m, text: response.message, tokenCount: responseTokens };
+          const hasTextPart = m.parts.some(p => p.kind === 'text');
+          return {
+            ...m,
+            parts: hasTextPart ? m.parts : [{ kind: 'text', content: response.message }],
+            tokenCount: responseTokens,
+          };
         }
         return m;
       }));
@@ -120,11 +125,12 @@ export const OnlinePromptOverlay = () => {
       console.error("Streaming error:", err);
       setMessages(prev => prev.map(m => {
         if (m.id === assistantId) {
-          return { ...m, text: `Error: ${err}` };
+          return { ...m, parts: [{ kind: 'text', content: `Error: ${err}` }] };
         }
         return m;
       }));
     } finally {
+      setMessages(prev => prev.map(m => m.id === assistantId ? markLastTextDone(m) : m));
       setStatus('IDLE');
     }
   }, [input, attachedFiles, promptTokens, sessionId, status, stopListening]);

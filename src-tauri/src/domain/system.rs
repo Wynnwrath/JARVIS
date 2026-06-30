@@ -8,8 +8,6 @@ pub struct SystemInfo {
     pub time: String,
     /// CPU core temperature in Celsius, if available from the sensor.
     pub cpu_temperature: Option<f32>,
-    /// Logged-in username (`USERNAME` or `USER` env var).
-    pub username: String,
     /// Global CPU usage as a percentage (0–100).
     pub cpu_usage: f32,
     /// RAM usage as a percentage of total physical memory.

@@ -22,6 +22,10 @@ pub enum AppError {
     /// General runtime error (DB, I/O, serialization, etc.).
     #[error("System error: {0}")]
     SystemError(String),
+
+    /// Permission subsystem error (e.g. gate timeout, preference lookup failure).
+    #[error("Permission error: {0}")]
+    PermissionError(String),
 }
 
 /// Converts diesel query errors into [`AppError::SystemError`].
@@ -48,6 +52,14 @@ impl From<serde_json::Error> for AppError {
 /// Converts I/O errors into [`AppError::SystemError`].
 impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
+        AppError::SystemError(e.to_string())
+    }
+}
+
+/// Converts Windows API errors into [`AppError::SystemError`].
+#[cfg(target_os = "windows")]
+impl From<windows::core::Error> for AppError {
+    fn from(e: windows::core::Error) -> Self {
         AppError::SystemError(e.to_string())
     }
 }

@@ -34,3 +34,10 @@ pub async fn get_system_info(
     use crate::domain::system::SystemInfoService;
     system_service.get_system_info()
 }
+
+#[tauri::command]
+pub fn get_current_user() -> Result<Option<String>, AppError> {
+    Ok(std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .ok())
+}

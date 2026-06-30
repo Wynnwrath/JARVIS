@@ -61,10 +61,6 @@ pub fn start_telemetry_worker(app_handle: tauri::AppHandle) {
     sys.refresh_cpu_all();
     sys.refresh_memory();
 
-    let username = std::env::var("USERNAME")
-        .or_else(|_| std::env::var("USER"))
-        .unwrap_or_else(|_| "User".to_string());
-
     loop {
         // Sleep first so we have a delta for CPU usage calculations
         std::thread::sleep(std::time::Duration::from_secs(3));
@@ -127,7 +123,6 @@ pub fn start_telemetry_worker(app_handle: tauri::AppHandle) {
         let info = SystemInfo {
             time,
             cpu_temperature,
-            username: username.clone(),
             cpu_usage,
             ram_usage,
             disk_usage,
