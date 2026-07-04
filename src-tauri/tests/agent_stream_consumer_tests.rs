@@ -1,4 +1,3 @@
-use agent_rs_lib::agent::agents::ContextManagedChatStream;
 use futures::stream;
 use jarvis_lib::domain::chat::StreamEvent;
 use jarvis_lib::domain::errors::AppError;
@@ -33,17 +32,8 @@ fn make_test_channel() -> (
 
 fn make_stream(
     items: Vec<Result<MultiTurnStreamItem<()>, rig_core::agent::StreamingError>>,
-) -> ContextManagedChatStream<MockStream, ()> {
-    let (tx, _rx) = tokio::sync::oneshot::channel();
-    ContextManagedChatStream::new(stream::iter(items), tx, vec![])
-}
-
-fn make_history_rx(
-    history: Vec<rig_core::message::Message>,
-) -> tokio::sync::oneshot::Receiver<Vec<rig_core::message::Message>> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let _ = tx.send(history);
-    rx
+) -> MockStream {
+    stream::iter(items)
 }
 
 #[tokio::test]
@@ -52,9 +42,8 @@ async fn text_delta_sends_text_event() {
     let stream = make_stream(vec![Ok(MultiTurnStreamItem::StreamAssistantItem(
         StreamedAssistantContent::Text(Text::new("hello")),
     ))]);
-    let rx = make_history_rx(vec![]);
 
-    let result = consume_chat_stream(stream, rx, &channel).await;
+    let result = consume_chat_stream(stream, &channel).await;
     assert!(result.is_ok());
 
     let captured = events.lock().unwrap();
@@ -78,9 +67,8 @@ async fn tool_call_sends_start_and_end() {
             internal_call_id: "ic1".to_string(),
         },
     ))]);
-    let rx = make_history_rx(vec![]);
 
-    let result = consume_chat_stream(stream, rx, &channel).await;
+    let result = consume_chat_stream(stream, &channel).await;
     assert!(result.is_ok());
 
     let captured = events.lock().unwrap();
@@ -106,9 +94,8 @@ async fn final_response_logs_and_completes() {
     let (channel, _events) = make_test_channel();
     let final_resp = rig_core::agent::FinalResponse::empty();
     let stream = make_stream(vec![Ok(MultiTurnStreamItem::FinalResponse(final_resp))]);
-    let rx = make_history_rx(vec![]);
 
-    let result = consume_chat_stream(stream, rx, &channel).await;
+    let result = consume_chat_stream(stream, &channel).await;
     assert!(result.is_ok());
 }
 
@@ -121,9 +108,8 @@ async fn stream_error_returns_system_error() {
         ))),
     );
     let stream = make_stream(vec![Err(err)]);
-    let rx = make_history_rx(vec![]);
 
-    let result = consume_chat_stream(stream, rx, &channel).await;
+    let result = consume_chat_stream(stream, &channel).await;
     assert!(result.is_err());
     match result.unwrap_err() {
         AppError::SystemError(msg) => assert!(msg.contains("test error")),

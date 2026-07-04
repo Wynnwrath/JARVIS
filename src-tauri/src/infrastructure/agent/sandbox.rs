@@ -1,6 +1,6 @@
 use crate::domain::config::AppConfig;
 use crate::domain::errors::AppError;
-use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};

@@ -7,7 +7,7 @@ use crate::domain::config::AppConfig;
 use crate::domain::errors::AppError;
 use crate::infrastructure::agent::AGENT_MANAGER;
 use crate::infrastructure::database::SessionRepository;
-use agent_rs_lib::agent::memory::tokenizer;
+use agent_rs::agent::memory::tokenizer;
 use rig_core::message::{AssistantContent, Message, UserContent};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};

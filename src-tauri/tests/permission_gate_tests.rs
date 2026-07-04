@@ -1,4 +1,4 @@
-use agent_rs_lib::agent::permission::PermissionResult;
+use agent_rs::agent::permission::PermissionResult;
 use jarvis_lib::domain::permission::PermissionResponse;
 use jarvis_lib::infrastructure::database::{create_pool, run_migrations, PermissionRepository};
 use jarvis_lib::infrastructure::permission_gate::{
@@ -275,7 +275,7 @@ async fn resolved_before_timeout_returns_response() {
 
 #[tokio::test]
 async fn auto_allow_sandbox_path_matching() {
-    use agent_rs_lib::security::{find_containing_root_shared, SandboxConfig, SharedSandbox};
+    use agent_rs::security::{find_containing_root_shared, SandboxConfig, SharedSandbox};
 
     tokio::time::timeout(Duration::from_millis(500), async {
         let tmp = std::env::temp_dir().join("jarvis_perm_sandbox_test");
@@ -427,8 +427,10 @@ async fn always_allow_precedence_global_still_works() {
 async fn handle_allow_always_derives_scope_and_persists() {
     let (repo, path) = setup_repo("handle_allow_always").await;
     let cache: Mutex<PrefCache> = Mutex::new(HashMap::new());
-    let response: Result<Result<PermissionResponse, tokio::sync::oneshot::error::RecvError>, tokio::time::error::Elapsed> =
-        Ok(Ok(PermissionResponse::AllowAlways { path: None }));
+    let response: Result<
+        Result<PermissionResponse, tokio::sync::oneshot::error::RecvError>,
+        tokio::time::error::Elapsed,
+    > = Ok(Ok(PermissionResponse::AllowAlways { path: None }));
 
     let result = tokio::time::timeout(Duration::from_secs(60), async {
         handle_permission_response(
@@ -454,7 +456,10 @@ async fn handle_allow_always_derives_scope_and_persists() {
 
     let cache = cache.lock().await;
     let entries = cache.get("write_document").unwrap();
-    let entry = entries.iter().find(|e| e.path_pattern.as_deref() == Some("/home/user/docs")).unwrap();
+    let entry = entries
+        .iter()
+        .find(|e| e.path_pattern.as_deref() == Some("/home/user/docs"))
+        .unwrap();
     assert_eq!(entry.decision, "allow");
 
     drop(cache);
@@ -465,8 +470,10 @@ async fn handle_allow_always_derives_scope_and_persists() {
 async fn handle_allow_always_no_path_skips_persistence() {
     let (repo, path) = setup_repo("handle_allow_always_no_path").await;
     let cache: Mutex<PrefCache> = Mutex::new(HashMap::new());
-    let response: Result<Result<PermissionResponse, tokio::sync::oneshot::error::RecvError>, tokio::time::error::Elapsed> =
-        Ok(Ok(PermissionResponse::AllowAlways { path: None }));
+    let response: Result<
+        Result<PermissionResponse, tokio::sync::oneshot::error::RecvError>,
+        tokio::time::error::Elapsed,
+    > = Ok(Ok(PermissionResponse::AllowAlways { path: None }));
 
     let result = tokio::time::timeout(Duration::from_secs(60), async {
         handle_permission_response(
@@ -504,8 +511,10 @@ async fn handle_allow_always_no_path_skips_persistence() {
 async fn handle_deny_always_derives_scope_and_persists() {
     let (repo, path) = setup_repo("handle_deny_always").await;
     let cache: Mutex<PrefCache> = Mutex::new(HashMap::new());
-    let response: Result<Result<PermissionResponse, tokio::sync::oneshot::error::RecvError>, tokio::time::error::Elapsed> =
-        Ok(Ok(PermissionResponse::DenyAlways { path: None }));
+    let response: Result<
+        Result<PermissionResponse, tokio::sync::oneshot::error::RecvError>,
+        tokio::time::error::Elapsed,
+    > = Ok(Ok(PermissionResponse::DenyAlways { path: None }));
 
     let result = tokio::time::timeout(Duration::from_secs(60), async {
         handle_permission_response(
@@ -531,7 +540,10 @@ async fn handle_deny_always_derives_scope_and_persists() {
 
     let cache = cache.lock().await;
     let entries = cache.get("read_file").unwrap();
-    let entry = entries.iter().find(|e| e.path_pattern.as_deref() == Some("/etc")).unwrap();
+    let entry = entries
+        .iter()
+        .find(|e| e.path_pattern.as_deref() == Some("/etc"))
+        .unwrap();
     assert_eq!(entry.decision, "deny");
 
     drop(cache);

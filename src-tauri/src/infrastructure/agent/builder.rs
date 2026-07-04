@@ -1,19 +1,19 @@
 use crate::domain::config::{AppConfig, Providers};
 use crate::domain::errors::AppError;
 use crate::infrastructure::permission_gate::AppPermissionGate;
-use agent_rs_lib::agent::permission::PermissionPolicy;
-use agent_rs_lib::agent::tools::{
+use agent_rs::agent::permission::PermissionPolicy;
+use agent_rs::agent::tools::{
     GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
 };
-use agent_rs_lib::agent::AgentContextExt;
-use agent_rs_lib::config::McpConfig;
-use agent_rs_lib::mcp::client::McpClient;
-use rig_core::prelude::*;
+use agent_rs::config::McpConfig;
+use agent_rs::mcp::registry::McpRegistry;
+use rig_core::client::CompletionClient;
 use rig_core::tool::ToolDyn;
 use std::path::Path;
 use std::sync::Arc;
 
 use super::dispatch::AppAgent;
+use super::dispatch::AppAgentInner;
 use super::sandbox::get_or_init_shared_sandbox;
 
 pub(crate) async fn build_agent(
@@ -27,7 +27,9 @@ pub(crate) async fn build_agent(
     let ask_user: PermissionPolicy = if let Some(g) = gate {
         PermissionPolicy::Custom(g)
     } else {
-        tracing::error!("AppPermissionGate not found in managed state — denying all tool permissions");
+        tracing::error!(
+            "AppPermissionGate not found in managed state — denying all tool permissions"
+        );
         PermissionPolicy::DenyAll
     };
     let sandbox = get_or_init_shared_sandbox(config);
@@ -65,7 +67,8 @@ pub(crate) async fn build_agent(
                 let single_config = McpConfig {
                     mcp_servers: single_servers,
                 };
-                match McpClient::new(single_config).tools(ask_user.clone()).await {
+                let registry = McpRegistry::new(single_config);
+                match registry.tools(ask_user.clone()).await {
                     Ok(mcp_tools) => {
                         tools.extend(mcp_tools);
                     }
@@ -104,7 +107,7 @@ pub(crate) async fn build_agent(
 
             let model = client.completion_model(&config.chat_model);
 
-            let compaction_model = rig_core::agent::AgentBuilder::new(model.clone())
+            let compaction_agent = rig_core::agent::AgentBuilder::new(model.clone())
                 .preamble(&config.compaction_prompt)
                 .build();
 
@@ -112,10 +115,14 @@ pub(crate) async fn build_agent(
                 .tools(tools)
                 .preamble(&config.system_prompt)
                 .default_max_turns(20)
-                .build()
-                .with_compaction(config.compaction_threshold, compaction_model);
+                .build();
 
-            Ok(AppAgent::OpenAi(agent))
+            Ok(AppAgent::OpenAi(AppAgentInner {
+                agent,
+                compaction_agent,
+                max_cycles: 20,
+                compaction_threshold: config.compaction_threshold,
+            }))
         }
         Providers::Gemini => {
             let mut builder =
@@ -137,10 +144,14 @@ pub(crate) async fn build_agent(
                 .tools(tools)
                 .preamble(&config.system_prompt)
                 .default_max_turns(20)
-                .build()
-                .with_compaction(config.compaction_threshold, compaction_model);
+                .build();
 
-            Ok(AppAgent::Gemini(agent))
+            Ok(AppAgent::Gemini(AppAgentInner {
+                agent,
+                compaction_agent: compaction_model,
+                max_cycles: 20,
+                compaction_threshold: config.compaction_threshold,
+            }))
         }
         Providers::Anthropic => {
             let mut builder =
@@ -162,10 +173,14 @@ pub(crate) async fn build_agent(
                 .tools(tools)
                 .preamble(&config.system_prompt)
                 .default_max_turns(20)
-                .build()
-                .with_compaction(config.compaction_threshold, compaction_model);
+                .build();
 
-            Ok(AppAgent::Anthropic(agent))
+            Ok(AppAgent::Anthropic(AppAgentInner {
+                agent,
+                compaction_agent: compaction_model,
+                max_cycles: 20,
+                compaction_threshold: config.compaction_threshold,
+            }))
         }
     }
 }

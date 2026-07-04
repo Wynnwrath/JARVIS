@@ -6,7 +6,7 @@ mod signature;
 mod stream_consumer;
 
 pub use builder::prebuild_agent;
-pub use dispatch::AppAgent;
+pub use dispatch::{AppAgent, AppAgentInner};
 pub use manager::{AgentManager, AGENT_MANAGER};
 pub use sandbox::try_get_shared_sandbox;
 pub use signature::ConfigSignature;

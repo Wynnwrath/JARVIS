@@ -1,6 +1,6 @@
 use crate::domain::chat::TokenCountResponse;
 use crate::domain::errors::AppError;
-use agent_rs_lib::agent::memory::tokenizer;
+use agent_rs::agent::memory::tokenizer;
 
 /// Helper function to perform the actual token counting using `agent_rs_lib` BPE tokenizer.
 ///

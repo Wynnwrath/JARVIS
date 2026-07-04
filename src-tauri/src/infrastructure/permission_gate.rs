@@ -1,8 +1,8 @@
 use crate::domain::errors::AppError;
 use crate::domain::permission::{PermissionRequest, PermissionResponse};
 use crate::infrastructure::database::PermissionRepository;
-use agent_rs_lib::agent::permission::{PermissionGate, PermissionResult};
-use agent_rs_lib::security::find_containing_root_shared;
+use agent_rs::agent::permission::{PermissionGate, PermissionResult};
+use agent_rs::security::find_containing_root_shared;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::Path;
@@ -212,7 +212,10 @@ pub async fn handle_permission_response(
     prefs: &Mutex<PrefCache>,
     tool_name: &str,
     description: &str,
-    response: Result<Result<PermissionResponse, oneshot::error::RecvError>, tokio::time::error::Elapsed>,
+    response: Result<
+        Result<PermissionResponse, oneshot::error::RecvError>,
+        tokio::time::error::Elapsed,
+    >,
     timeout: Duration,
 ) -> PermissionResult {
     match response {
@@ -278,10 +281,7 @@ pub async fn handle_permission_response(
             reason: "Permission request channel was cancelled".to_string(),
         },
         Err(_) => PermissionResult::Deny {
-            reason: format!(
-                "Permission request timed out after {}s",
-                timeout.as_secs()
-            ),
+            reason: format!("Permission request timed out after {}s", timeout.as_secs()),
         },
     }
 }

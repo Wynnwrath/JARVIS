@@ -1,5 +1,5 @@
-use agent_rs_lib::domain::errors::DocumentError;
-use agent_rs_lib::security::{SandboxConfig, SharedSandbox};
+use agent_rs::domain::errors::DocumentError;
+use agent_rs::security::{SandboxConfig, SharedSandbox};
 use jarvis_lib::domain::config::AppConfig;
 use jarvis_lib::infrastructure::agent::sandbox::sync_sandbox_roots_for;
 use std::sync::Arc;
@@ -43,7 +43,10 @@ fn sync_adds_new_root() {
     let sc = SandboxConfig::single(primary.path()).unwrap();
     let shared = Arc::new(SharedSandbox::from(sc));
 
-    let config = make_config(primary.path(), vec![extra.path().to_string_lossy().into_owned()]);
+    let config = make_config(
+        primary.path(),
+        vec![extra.path().to_string_lossy().into_owned()],
+    );
     sync_sandbox_roots_for(&shared, &config).unwrap();
 
     let snapshot = shared.snapshot();
@@ -61,7 +64,11 @@ fn sync_removes_missing_root() {
     let primary = TempDir::new("primary");
     let extra = TempDir::new("extra");
 
-    let sc = SandboxConfig::new(vec![primary.path().to_path_buf(), extra.path().to_path_buf()]).unwrap();
+    let sc = SandboxConfig::new(vec![
+        primary.path().to_path_buf(),
+        extra.path().to_path_buf(),
+    ])
+    .unwrap();
     let shared = Arc::new(SharedSandbox::from(sc));
 
     assert_eq!(shared.snapshot().canonical_roots().len(), 2);
@@ -87,7 +94,10 @@ fn sync_is_idempotent() {
     let sc = SandboxConfig::single(primary.path()).unwrap();
     let shared = Arc::new(SharedSandbox::from(sc));
 
-    let config = make_config(primary.path(), vec![extra.path().to_string_lossy().into_owned()]);
+    let config = make_config(
+        primary.path(),
+        vec![extra.path().to_string_lossy().into_owned()],
+    );
 
     sync_sandbox_roots_for(&shared, &config).unwrap();
     let count_before = shared.snapshot().canonical_roots().len();

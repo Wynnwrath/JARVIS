@@ -1,8 +1,8 @@
 use crate::domain::errors::AppError;
 use crate::infrastructure::agent::try_get_shared_sandbox;
 use crate::infrastructure::permission_gate::AppPermissionGate;
-use agent_rs_lib::agent::permission::PermissionPolicy;
-use agent_rs_lib::agent::tools::{
+use agent_rs::agent::permission::PermissionPolicy;
+use agent_rs::agent::tools::{
     GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
 };
 use rig_core::tool::ToolDyn;
@@ -19,11 +19,13 @@ pub async fn read_document(
     let policy = gate
         .map(|g| {
             PermissionPolicy::Custom(
-                g as Arc<dyn agent_rs_lib::agent::permission::PermissionGate + Send + Sync>,
+                g as Arc<dyn agent_rs::agent::permission::PermissionGate + Send + Sync>,
             )
         })
         .unwrap_or_else(|| {
-            tracing::error!("AppPermissionGate not found in managed state for read_document — denying access");
+            tracing::error!(
+                "AppPermissionGate not found in managed state for read_document — denying access"
+            );
             PermissionPolicy::DenyAll
         });
     let tool = ReadDocumentTool::new(sandbox, allowed_extensions, policy);
@@ -45,11 +47,13 @@ pub async fn write_document(
     let policy = gate
         .map(|g| {
             PermissionPolicy::Custom(
-                g as Arc<dyn agent_rs_lib::agent::permission::PermissionGate + Send + Sync>,
+                g as Arc<dyn agent_rs::agent::permission::PermissionGate + Send + Sync>,
             )
         })
         .unwrap_or_else(|| {
-            tracing::error!("AppPermissionGate not found in managed state for write_document — denying access");
+            tracing::error!(
+                "AppPermissionGate not found in managed state for write_document — denying access"
+            );
             PermissionPolicy::DenyAll
         });
     let tool = WriteDocumentTool::new(sandbox, allowed_extensions, policy);
@@ -71,11 +75,13 @@ pub async fn list_directory(
     let policy = gate
         .map(|g| {
             PermissionPolicy::Custom(
-                g as Arc<dyn agent_rs_lib::agent::permission::PermissionGate + Send + Sync>,
+                g as Arc<dyn agent_rs::agent::permission::PermissionGate + Send + Sync>,
             )
         })
         .unwrap_or_else(|| {
-            tracing::error!("AppPermissionGate not found in managed state for list_directory — denying access");
+            tracing::error!(
+                "AppPermissionGate not found in managed state for list_directory — denying access"
+            );
             PermissionPolicy::DenyAll
         });
     let tool = ListDirectoryTool::new(sandbox, policy);
@@ -97,11 +103,13 @@ pub async fn glob_search(
     let policy = gate
         .map(|g| {
             PermissionPolicy::Custom(
-                g as Arc<dyn agent_rs_lib::agent::permission::PermissionGate + Send + Sync>,
+                g as Arc<dyn agent_rs::agent::permission::PermissionGate + Send + Sync>,
             )
         })
         .unwrap_or_else(|| {
-            tracing::error!("AppPermissionGate not found in managed state for glob_search — denying access");
+            tracing::error!(
+                "AppPermissionGate not found in managed state for glob_search — denying access"
+            );
             PermissionPolicy::DenyAll
         });
     let tool = GlobSearchTool::new(sandbox, policy);
@@ -123,11 +131,13 @@ pub async fn grep_search(
     let policy = gate
         .map(|g| {
             PermissionPolicy::Custom(
-                g as Arc<dyn agent_rs_lib::agent::permission::PermissionGate + Send + Sync>,
+                g as Arc<dyn agent_rs::agent::permission::PermissionGate + Send + Sync>,
             )
         })
         .unwrap_or_else(|| {
-            tracing::error!("AppPermissionGate not found in managed state for grep_search — denying access");
+            tracing::error!(
+                "AppPermissionGate not found in managed state for grep_search — denying access"
+            );
             PermissionPolicy::DenyAll
         });
     let tool = GrepSearchTool::new(sandbox, allowed_extensions, policy);
