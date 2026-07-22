@@ -40,6 +40,30 @@ pub struct IndexingProgressPayload {
     pub progress: u8,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RagDirEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub path: String,
+    pub size: Option<u64>,
+}
+
+fn assert_within_rag_dirs(path: &Path, config: &AppConfig) -> Result<std::path::PathBuf, AppError> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| AppError::SystemError(format!("failed to resolve path: {}", e)))?;
+    for dir in &config.rag_dirs {
+        if let Ok(root) = Path::new(dir).canonicalize() {
+            if canonical.starts_with(&root) {
+                return Ok(canonical);
+            }
+        }
+    }
+    Err(AppError::SystemError(
+        "path is not within a configured RAG directory".into(),
+    ))
+}
+
 fn count_indexable_files(dir: &Path) -> u64 {
     let mut count = 0;
     if let Ok(entries) = std::fs::read_dir(dir) {
@@ -84,15 +108,21 @@ pub async fn get_telemetry(
 
     let indexed_notes = rag.map(|r| r.indexer.list().len() as u64).unwrap_or(0);
 
-    let total_notes = if config.sandbox_dir.is_empty() || config.sandbox_dir == "." {
-        0
-    } else {
-        let vault = Path::new(&config.sandbox_dir);
-        if vault.exists() {
-            count_indexable_files(vault)
-        } else {
-            0
+    let total_notes = {
+        let mut count = 0;
+        if !config.sandbox_dir.is_empty() && config.sandbox_dir != "." {
+            let vault = Path::new(&config.sandbox_dir);
+            if vault.exists() {
+                count += count_indexable_files(vault);
+            }
         }
+        for dir in &config.rag_dirs {
+            let path = Path::new(dir);
+            if path.exists() {
+                count += count_indexable_files(path);
+            }
+        }
+        count
     };
 
     let rag_data = app_data_dir.join("rag_data");
@@ -174,6 +204,68 @@ pub async fn toggle_exclusion(
     Ok(!was_excluded)
 }
 
+pub async fn list_rag_directory(
+    path: &str,
+    config: &AppConfig,
+) -> Result<Vec<RagDirEntry>, AppError> {
+    let canonical = assert_within_rag_dirs(Path::new(path), config)?;
+    let mut entries = std::fs::read_dir(&canonical)
+        .map_err(|e| AppError::SystemError(format!("failed to read directory: {}", e)))?;
+
+    let mut out = Vec::new();
+    while let Some(entry) = entries.next().transpose()? {
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let size = if is_dir {
+            None
+        } else {
+            entry.metadata().ok().map(|m| m.len())
+        };
+        out.push(RagDirEntry {
+            name: entry.file_name().to_string_lossy().into_owned(),
+            is_dir,
+            path: entry.path().to_string_lossy().into_owned(),
+            size,
+        });
+    }
+    out.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    Ok(out)
+}
+
+pub async fn read_rag_document(path: &str, config: &AppConfig) -> Result<String, AppError> {
+    let canonical = assert_within_rag_dirs(Path::new(path), config)?;
+    if canonical.is_dir() {
+        return Err(AppError::SystemError("path is a directory".into()));
+    }
+    std::fs::read_to_string(&canonical)
+        .map_err(|e| AppError::SystemError(format!("failed to read document: {}", e)))
+}
+
+pub async fn remove_rag_dir(
+    dir_path: &str,
+    config: &mut AppConfig,
+    rag: Option<&BuiltRag>,
+) -> Result<(), AppError> {
+    if !config.rag_dirs.iter().any(|d| d == dir_path) {
+        return Err(AppError::SystemError(
+            "directory is not a configured RAG directory".into(),
+        ));
+    }
+
+    if let Some(r) = rag {
+        if let Err(e) = r.indexer.remove(Path::new(dir_path)).await {
+            tracing::warn!("de-index on rag dir removal reported: {}", e);
+        }
+    }
+
+    config.rag_dirs.retain(|d| d != dir_path);
+    Ok(())
+}
+
 pub async fn query_sandbox(
     query: &str,
     rag: &BuiltRag,
@@ -239,20 +331,17 @@ pub async fn start_indexing(
     });
 
     let vault = Path::new(vault_path);
-    if !vault.exists() {
-        emit(IndexingProgressPayload {
-            level: "ERROR".into(),
-            message: format!("vault path does not exist: {}", vault_path),
-            progress: 0,
-        });
-        return Err(AppError::SystemError(format!(
-            "vault path does not exist: {}",
-            vault_path
-        )));
-    }
 
     let mut dirs = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(vault) {
+    if vault_path.is_empty() || !vault.exists() {
+        if !vault_path.is_empty() {
+            emit(IndexingProgressPayload {
+                level: "INDEX".into(),
+                message: format!("[INDEX] Vault path not found, skipping: {}", vault_path),
+                progress: 0,
+            });
+        }
+    } else if let Ok(entries) = std::fs::read_dir(vault) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -261,6 +350,19 @@ pub async fn start_indexing(
                     dirs.push(path);
                 }
             }
+        }
+    }
+
+    for dir in &config.rag_dirs {
+        let path = Path::new(dir);
+        if path.is_dir() {
+            dirs.push(path.to_path_buf());
+        } else {
+            emit(IndexingProgressPayload {
+                level: "INDEX".into(),
+                message: format!("[INDEX] Indexed dir missing, skipping: {}", dir),
+                progress: 0,
+            });
         }
     }
 

@@ -207,6 +207,9 @@ pub fn run() {
             clear_rag_database,
             query_rag_sandbox,
             start_rag_indexing,
+            list_rag_directory,
+            read_rag_document,
+            remove_rag_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -89,6 +89,52 @@ pub async fn query_rag_sandbox(
 }
 
 #[tauri::command]
+pub async fn list_rag_directory(
+    path: String,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
+) -> Result<Vec<rag_handler::RagDirEntry>, AppError> {
+    let config_guard = config.read().await;
+    rag_handler::list_rag_directory(&path, &config_guard).await
+}
+
+#[tauri::command]
+pub async fn read_rag_document(
+    path: String,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
+) -> Result<String, AppError> {
+    let config_guard = config.read().await;
+    rag_handler::read_rag_document(&path, &config_guard).await
+}
+
+#[tauri::command]
+pub async fn remove_rag_dir(
+    dir_path: String,
+    config: State<'_, tokio::sync::RwLock<AppConfig>>,
+    manager: State<'_, RagManager>,
+    app: AppHandle,
+) -> Result<(), AppError> {
+    let updated_config;
+
+    {
+        let mut config_guard = config.write().await;
+        let rag = manager.get().await;
+        rag_handler::remove_rag_dir(&dir_path, &mut config_guard, rag.as_deref()).await?;
+        updated_config = config_guard.clone();
+    }
+
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| AppError::SystemError(format!("failed to resolve config dir: {}", e)))?;
+    let config_path = config_dir.join("config.toml");
+    updated_config
+        .save_to(&config_path)
+        .map_err(|e| AppError::SystemError(format!("failed to save config: {}", e)))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn start_rag_indexing(
     vault_path: String,
     config: State<'_, tokio::sync::RwLock<AppConfig>>,

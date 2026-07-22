@@ -27,6 +27,13 @@ export interface IndexingProgressPayload {
   progress: number;
 }
 
+export interface RagDirEntry {
+  name: string;
+  is_dir: boolean;
+  path: string;
+  size?: number;
+}
+
 const isTauri = () => {
   return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
 };
@@ -157,6 +164,20 @@ export const queryRagSandbox = async (query: string): Promise<SearchResult[]> =>
     item.note.toLowerCase().includes(query.toLowerCase()) ||
     Math.random() > 0.3
   );
+};
+
+export const listRagDirectory = async (path: string): Promise<RagDirEntry[]> => {
+  const result = await tryInvoke<RagDirEntry[]>("list_rag_directory", { path });
+  return result ?? [];
+};
+
+export const readRagDocument = async (path: string): Promise<string> => {
+  const result = await tryInvoke<string>("read_rag_document", { path });
+  return result ?? `[MOCK CONTENT] File content for: ${path}`;
+};
+
+export const removeRagDir = async (dirPath: string): Promise<void> => {
+  await tryInvoke<void>("remove_rag_dir", { dirPath });
 };
 
 export const startRagIndexing = async (

@@ -68,6 +68,7 @@ export interface AppConfig {
   embedding_model: string;
   rag_use_gpu: boolean;
   rag_exclusions: string[];
+  rag_dirs: string[];
 }
 
 export interface PermissionRequest {

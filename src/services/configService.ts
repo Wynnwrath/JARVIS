@@ -31,6 +31,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   embedding_model: 'BGESmallENV15',
   rag_use_gpu: false,
   rag_exclusions: [],
+  rag_dirs: [],
 };
 
 // ─── Re-export the type for convenience ─────────────────────────────────────

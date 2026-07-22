@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { getRagTelemetry, clearRagDatabase, startRagIndexing, RagTelemetry } from '@/services/ragService';
+import { getRagTelemetry, clearRagDatabase, startRagIndexing, removeRagDir, RagTelemetry } from '@/services/ragService';
 import { useDocument } from '@/hooks/useDocument';
+import { useRagDirectory } from '@/hooks/useRagDirectory';
 import { getConfig, saveConfig } from '@/services/configService';
 import { RAGHeader } from '@/features/rag/components/RAGHeader';
 import { FolderBrowser } from '@/features/rag/components/FolderBrowser';
@@ -29,6 +30,10 @@ export const OfflineRAGPage = () => {
     selectFile, loadDirectory, goBack
   } = useDocument(vaultPath);
 
+  const [ragDirs, setRagDirs] = useState<string[]>([]);
+  const [activeRagDir, setActiveRagDir] = useState<string | null>(null);
+  const ragDir = useRagDirectory(activeRagDir);
+
   useEffect(() => {
     const initConfig = async () => {
       try {
@@ -36,6 +41,7 @@ export const OfflineRAGPage = () => {
         if (config.sandbox_dir) {
           setVaultPath(config.sandbox_dir);
         }
+        setRagDirs(config.rag_dirs ?? []);
       } catch (err) {
         console.error('[OfflineRAGPage] Failed to fetch sandbox config:', err);
       }
@@ -67,6 +73,41 @@ export const OfflineRAGPage = () => {
       }
     } catch (err) {
       console.error('[OfflineRAGPage] Failed to select path:', err);
+    }
+  };
+
+  const handleAddRagDir = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false, title: 'Add Directory to Index' });
+      if (selected && typeof selected === 'string') {
+        const normalized = selected.replace(/[/\\]$/, "");
+        if (ragDirs.includes(normalized)) {
+          setLogs(prev => [...prev, `[DISCOVERY] Already indexed: ${normalized}`]);
+          return;
+        }
+        const config = await getConfig();
+        await saveConfig({ ...config, rag_dirs: [...(config.rag_dirs ?? []), normalized] });
+        setRagDirs(prev => [...prev, normalized]);
+        setLogs(prev => [...prev, `[DISCOVERY] Indexed dir added: ${normalized}`]);
+      }
+    } catch (err) {
+      console.error('[OfflineRAGPage] Failed to add indexed dir:', err);
+      setLogs(prev => [...prev, `[ERROR] Failed to add indexed dir: ${err}`]);
+    }
+  };
+
+  const handleRemoveRagDir = async (dir: string) => {
+    try {
+      await removeRagDir(dir);
+      const config = await getConfig();
+      setRagDirs(config.rag_dirs ?? []);
+      if (activeRagDir && (activeRagDir === dir || activeRagDir.startsWith(dir))) {
+        setActiveRagDir(null);
+      }
+      setLogs(prev => [...prev, `[CLEANUP] Indexed dir removed and de-indexed: ${dir}`]);
+    } catch (err) {
+      console.error('[OfflineRAGPage] Failed to remove indexed dir:', err);
+      setLogs(prev => [...prev, `[ERROR] Failed to remove indexed dir: ${err}`]);
     }
   };
 
@@ -108,6 +149,24 @@ export const OfflineRAGPage = () => {
 
   const folders = useMemo(() => documentFiles.filter(f => f.is_dir).map(f => f.name), [documentFiles]);
   const docs = useMemo(() => documentFiles.filter(f => !f.is_dir).map(f => ({ name: f.name, path: f.path })), [documentFiles]);
+  const ragDocs = useMemo(() => ragDir.files.filter(f => !f.is_dir).map(f => ({ name: f.name, path: f.path })), [ragDir.files]);
+
+  const activeRagDirName = activeRagDir
+    ? activeRagDir.replace(/[/\\]$/, "").split(/[/\\]/).pop() || activeRagDir
+    : null;
+  const browserSelected = activeRagDirName ?? (currentPath ? currentPath.split(/[/\\]/).pop() || null : null);
+
+  const handleBrowserBack = () => {
+    if (activeRagDir) {
+      if (ragDir.currentPath === activeRagDir) {
+        setActiveRagDir(null);
+      } else {
+        ragDir.goBack();
+      }
+    } else {
+      goBack();
+    }
+  };
 
   return (
     <div className="h-full flex flex-col p-6 bg-offline-bg">
@@ -117,13 +176,32 @@ export const OfflineRAGPage = () => {
         {/* Column 1: Folder Browser */}
         <FolderBrowser
           folders={folders}
-          selectedFolder={currentPath ? currentPath.split(/[/\\]/).pop() || null : null}
-          onSelect={(folder) => loadDirectory(folder)}
-          onBack={goBack}
+          selectedFolder={browserSelected}
+          onSelect={(folder) => { setActiveRagDir(null); loadDirectory(folder); }}
+          onBack={handleBrowserBack}
+          ragDirs={ragDirs}
+          activeRagDir={activeRagDir}
+          onAddDir={handleAddRagDir}
+          onSelectRagDir={(path) => setActiveRagDir(path)}
+          onRemoveRagDir={handleRemoveRagDir}
         />
 
         {/* Column 2: Document List / File Preview */}
-        {selectedFile && !docLoading ? (
+        {activeRagDir ? (
+          ragDir.selectedFile && !ragDir.loading ? (
+            <FilePreview
+              content={ragDir.error ? `**Error reading file:**\n\n${ragDir.error}` : (ragDir.selectedFileContent || '_(empty document)_')}
+              fileName={ragDir.selectedFile.split(/[/\\]/).pop() || ragDir.selectedFile}
+              onClose={() => ragDir.setSelectedFile('')}
+            />
+          ) : (
+            <DocumentExplorer
+              documents={ragDocs}
+              onSelect={(path) => ragDir.selectFile(path)}
+              selectedDocument={ragDir.selectedFile}
+            />
+          )
+        ) : selectedFile && !docLoading ? (
           <FilePreview
             content={docError ? `**Error reading file:**\n\n${docError}` : (selectedFileContent || '_(empty document)_')}
             fileName={selectedFile.split('/').pop() || selectedFile}

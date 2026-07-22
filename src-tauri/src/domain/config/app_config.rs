@@ -70,6 +70,10 @@ pub struct AppConfig {
     /// the vault subdirectory name).
     #[serde(default)]
     pub rag_exclusions: Vec<String>,
+    /// User-defined directories (absolute paths) indexed by the RAG
+    /// pipeline independently of the sandbox.
+    #[serde(default)]
+    pub rag_dirs: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -95,6 +99,7 @@ impl Default for AppConfig {
             embedding_model: default_embedding_model(),
             rag_use_gpu: false,
             rag_exclusions: Vec::new(),
+            rag_dirs: Vec::new(),
         }
     }
 }
