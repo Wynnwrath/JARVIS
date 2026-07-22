@@ -61,6 +61,19 @@ pub(crate) async fn build_agent(
         )),
     ];
 
+    if config.rag_enabled {
+        if let Some(rm) = rag_manager {
+            if let Some(rag) = rm.get().await {
+                if config.rag_agent_tools.iter().any(|t| t == "manage") {
+                    tools.push(Box::new(rag.indexer.tool(ask_user.clone())));
+                }
+                if config.rag_agent_tools.iter().any(|t| t == "search") {
+                    tools.push(Box::new(rag.indexer.search_tool()));
+                }
+            }
+        }
+    }
+
     if Path::new(&config.mcp_config_path).exists() {
         if let Ok(mcp_config) = McpConfig::from_path(&config.mcp_config_path) {
             for (name, server_def) in mcp_config.mcp_servers {
@@ -113,18 +126,10 @@ pub(crate) async fn build_agent(
                 .preamble(&config.compaction_prompt)
                 .build();
 
-            let mut agent_builder = rig_core::agent::AgentBuilder::new(model)
+            let agent_builder = rig_core::agent::AgentBuilder::new(model)
                 .tools(tools)
                 .preamble(&config.system_prompt)
                 .default_max_turns(20);
-
-            if config.rag_enabled {
-                if let Some(rm) = rag_manager {
-                    if let Some(index) = rm.vector_index_view().await {
-                        agent_builder = agent_builder.dynamic_context(3, index);
-                    }
-                }
-            }
 
             let agent = agent_builder.build();
 
@@ -150,19 +155,11 @@ pub(crate) async fn build_agent(
                 .preamble(&config.compaction_prompt)
                 .build();
 
-            let mut agent_builder = client
+            let agent_builder = client
                 .agent(&config.chat_model)
                 .tools(tools)
                 .preamble(&config.system_prompt)
                 .default_max_turns(20);
-
-            if config.rag_enabled {
-                if let Some(rm) = rag_manager {
-                    if let Some(index) = rm.vector_index_view().await {
-                        agent_builder = agent_builder.dynamic_context(3, index);
-                    }
-                }
-            }
 
             let agent = agent_builder.build();
 
@@ -188,19 +185,11 @@ pub(crate) async fn build_agent(
                 .preamble(&config.compaction_prompt)
                 .build();
 
-            let mut agent_builder = client
+            let agent_builder = client
                 .agent(&config.chat_model)
                 .tools(tools)
                 .preamble(&config.system_prompt)
                 .default_max_turns(20);
-
-            if config.rag_enabled {
-                if let Some(rm) = rag_manager {
-                    if let Some(index) = rm.vector_index_view().await {
-                        agent_builder = agent_builder.dynamic_context(3, index);
-                    }
-                }
-            }
 
             let agent = agent_builder.build();
 

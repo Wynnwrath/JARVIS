@@ -5,7 +5,8 @@ use std::path::Path;
 
 use super::defaults::{
     default_compaction_prompt, default_compaction_threshold, default_database_name,
-    default_embedding_model, default_rag_enabled, default_read_extensions, default_sandbox_dir,
+    default_embedding_model, default_rag_agent_tools, default_rag_enabled, default_read_extensions,
+    default_sandbox_dir,
     default_system_prompt, default_transcription_model_path, default_write_extensions,
 };
 use super::providers::Providers;
@@ -60,6 +61,9 @@ pub struct AppConfig {
     /// Whether the RAG subsystem is enabled for chat context injection.
     #[serde(default = "default_rag_enabled")]
     pub rag_enabled: bool,
+    /// Which RAG tools the agent receives ("search", "manage").
+    #[serde(default = "default_rag_agent_tools")]
+    pub rag_agent_tools: Vec<String>,
     /// Active embedding model identifier (fastembed enum variant name).
     #[serde(default = "default_embedding_model")]
     pub embedding_model: String,
@@ -96,6 +100,7 @@ impl Default for AppConfig {
             read_extensions: default_read_extensions(),
             write_extensions: default_write_extensions(),
             rag_enabled: default_rag_enabled(),
+            rag_agent_tools: default_rag_agent_tools(),
             embedding_model: default_embedding_model(),
             rag_use_gpu: false,
             rag_exclusions: Vec::new(),

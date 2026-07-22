@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use agent_rs::agent::embeddings::{ort, EmbeddingService, FastembedModel};
-use agent_rs::rag::{BuiltRag, ErasedEmbedder, RagPipeline, TurboVectorIndex};
+use agent_rs::rag::{BuiltRag, RagPipeline};
 use tokio::sync::RwLock;
 
 use crate::domain::config::AppConfig;
@@ -12,7 +12,6 @@ pub struct RagManager {
     inner: RwLock<Option<Arc<BuiltRag>>>,
     config_fingerprint: RwLock<Option<String>>,
     index_path: RwLock<Option<std::path::PathBuf>>,
-    embedder: RwLock<Option<Arc<dyn ErasedEmbedder>>>,
 }
 
 impl RagManager {
@@ -22,7 +21,6 @@ impl RagManager {
             inner: RwLock::new(None),
             config_fingerprint: RwLock::new(None),
             index_path: RwLock::new(None),
-            embedder: RwLock::new(None),
         }
     }
 
@@ -65,8 +63,6 @@ impl RagManager {
         )
         .map_err(|e| AppError::SystemError(format!("failed to create embedding service: {}", e)))?;
 
-        let embedder: Arc<dyn ErasedEmbedder> = Arc::new(svc.clone());
-
         let rag_data = app_data_dir.join("rag_data");
         std::fs::create_dir_all(&rag_data)
             .map_err(|e| AppError::SystemError(format!("failed to create rag data dir: {}", e)))?;
@@ -84,11 +80,9 @@ impl RagManager {
             let mut inner = self.inner.write().await;
             let mut fp = self.config_fingerprint.write().await;
             let mut ip = self.index_path.write().await;
-            let mut emb = self.embedder.write().await;
             *inner = Some(Arc::clone(&arc));
             *fp = Some(fingerprint);
             *ip = Some(rag_data.join("rag.tvim"));
-            *emb = Some(embedder);
         }
 
         Ok(arc)
@@ -98,25 +92,14 @@ impl RagManager {
         self.inner.read().await.as_ref().map(Arc::clone)
     }
 
-    pub async fn vector_index_view(&self) -> Option<TurboVectorIndex> {
-        let inner = self.inner.read().await;
-        let embedder = self.embedder.read().await;
-        match (inner.as_ref(), embedder.as_ref()) {
-            (Some(rag), Some(emb)) => Some(rag.indexer.pipeline().build(Arc::clone(emb))),
-            _ => None,
-        }
-    }
-
     pub async fn clear(&self, config: &AppConfig, app_data_dir: &Path) -> Result<(), AppError> {
         {
             let mut inner = self.inner.write().await;
             let mut fp = self.config_fingerprint.write().await;
             let mut ip = self.index_path.write().await;
-            let mut emb = self.embedder.write().await;
             *inner = None;
             *fp = None;
             *ip = None;
-            *emb = None;
         }
 
         let rag_data = app_data_dir.join("rag_data");
