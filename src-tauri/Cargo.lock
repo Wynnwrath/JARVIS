@@ -30,8 +30,8 @@ dependencies = [
 
 [[package]]
 name = "agent_rs"
-version = "0.10.0"
-source = "git+https://github.com/skaarfundgandr/agent_rs.git?rev=d5c38d8e780e45bc337ee06601ccb68de6a4bf32#d5c38d8e780e45bc337ee06601ccb68de6a4bf32"
+version = "0.11.0"
+source = "git+https://github.com/skaarfundgandr/agent_rs.git?rev=a41a34f#a41a34fc573d8ea77fe8059fe9aa0903867bc8e3"
 dependencies = [
  "anyhow",
  "async-trait",
