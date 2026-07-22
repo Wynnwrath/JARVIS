@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 use crate::domain::config::AppConfig;
 use crate::domain::errors::AppError;
+use crate::infrastructure::agent::tools::JarvisPdfLoader;
 
 pub struct RagManager {
     inner: RwLock<Option<Arc<BuiltRag>>>,
@@ -70,6 +71,7 @@ impl RagManager {
             .embedder(svc)
             .store_at(&rag_data)
             .extensions(["txt", "md", "pdf"])
+            .loader("pdf", Arc::new(JarvisPdfLoader))
             .build()
             .await
             .map_err(|e| AppError::SystemError(format!("failed to build RAG pipeline: {}", e)))?;
@@ -104,6 +106,7 @@ impl RagManager {
 
         let rag_data = app_data_dir.join("rag_data");
         let _ = std::fs::remove_file(rag_data.join("rag.db"));
+        let _ = std::fs::remove_file(rag_data.join("mtimes.json"));
         if let Ok(entries) = std::fs::read_dir(&rag_data) {
             for entry in entries.flatten() {
                 let path = entry.path();

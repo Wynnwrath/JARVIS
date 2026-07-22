@@ -105,7 +105,7 @@ pub(crate) fn extract_pdf_text(path: &Path) -> Result<String, DocumentError> {
         .map_err(|e| DocumentError::Pdf(format!("failed to get page count: {e}")))?;
     let mut text = String::new();
     for i in 0..page_count {
-        match doc.extract_text_auto(i) {
+        match doc.extract_text(i) {
             Ok(page_text) => {
                 if !text.is_empty() {
                     text.push('\n');
