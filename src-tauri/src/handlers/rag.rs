@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::UNIX_EPOCH;
 
 use agent_rs::rag::{BuiltRag, RagChunkRow};
 use rig_core::vector_store::request::VectorSearchRequest;
@@ -348,6 +350,7 @@ pub async fn start_indexing(
     config: &AppConfig,
     rag: &Arc<BuiltRag>,
     app_data_dir: &Path,
+    force: bool,
     emit: impl Fn(IndexingProgressPayload),
 ) -> Result<(), AppError> {
     emit(IndexingProgressPayload {
@@ -433,20 +436,86 @@ pub async fn start_indexing(
         return Err(AppError::SystemError("no indexable files found".into()));
     }
 
+    let mtimes_path = app_data_dir.join("rag_data").join("mtimes.json");
+    let mut mtimes: HashMap<String, u64> = if mtimes_path.exists() {
+        std::fs::read_to_string(&mtimes_path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
     let mut done = 0usize;
     let mut last_pct = 0u8;
+    let mut newly_indexed = 0u64;
+    let mut reindexed = 0u64;
+    let mut skipped = 0u64;
+    let mut failed = 0u64;
+
     for files in &file_groups {
         for file in files {
-            if let Err(e) = rag.indexer.add(file).await {
-                emit(IndexingProgressPayload {
-                    level: "INDEX".into(),
-                    message: format!(
-                        "[INDEX] Failed to index {}: {} — skipping",
-                        file.display(),
-                        e
-                    ),
-                    progress: last_pct,
-                });
+            let current_mtime = std::fs::metadata(file)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs());
+
+            let canonical = file.to_string_lossy().to_string();
+
+            let should_skip = if force {
+                false
+            } else if let Some(&stored_mtime) = mtimes.get(&canonical) {
+                current_mtime.map(|cur| cur <= stored_mtime).unwrap_or(false)
+            } else {
+                false
+            };
+
+            if should_skip {
+                skipped += 1;
+                done += 1;
+                let pct = ((done as f32 / total_files as f32) * 90.0) as u8;
+                if pct != last_pct {
+                    last_pct = pct.min(90);
+                    emit(IndexingProgressPayload {
+                        level: "INDEX".into(),
+                        message: String::new(),
+                        progress: last_pct,
+                    });
+                }
+                continue;
+            }
+
+            let is_new = !mtimes.contains_key(&canonical);
+            let result = if force || !is_new {
+                rag.indexer.reindex(file).await
+            } else {
+                rag.indexer.add(file).await
+            };
+
+            match result {
+                Ok(_) => {
+                    if force || !is_new {
+                        reindexed += 1;
+                    } else {
+                        newly_indexed += 1;
+                    }
+                    if let Some(mtime_secs) = current_mtime {
+                        mtimes.insert(canonical, mtime_secs);
+                    }
+                }
+                Err(e) => {
+                    emit(IndexingProgressPayload {
+                        level: "INDEX".into(),
+                        message: format!(
+                            "[INDEX] Failed to index {}: {} — skipping",
+                            file.display(),
+                            e
+                        ),
+                        progress: last_pct,
+                    });
+                    failed += 1;
+                }
             }
             done += 1;
             let pct = ((done as f32 / total_files as f32) * 90.0) as u8;
@@ -480,9 +549,19 @@ pub async fn start_indexing(
         )));
     }
 
+    if let Some(dir) = mtimes_path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(json) = serde_json::to_string(&mtimes) {
+        let _ = std::fs::write(&mtimes_path, json);
+    }
+
     emit(IndexingProgressPayload {
         level: "SUCCESS".into(),
-        message: "[SUCCESS] Ingestion completed. Local RAG index status: OK.".into(),
+        message: format!(
+            "[SUCCESS] Ingestion completed. New: {}, Reindexed: {}, Skipped: {}, Failed: {}",
+            newly_indexed, reindexed, skipped, failed
+        ),
         progress: 100,
     });
 

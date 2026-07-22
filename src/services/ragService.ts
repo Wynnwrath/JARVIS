@@ -181,8 +181,9 @@ export const removeRagDir = async (dirPath: string): Promise<void> => {
 };
 
 export const startRagIndexing = async (
-  vaultPath: string, 
-  onProgress: (payload: IndexingProgressPayload) => void
+  vaultPath: string,
+  onProgress: (payload: IndexingProgressPayload) => void,
+  force: boolean = false
 ): Promise<void> => {
   if (isTauri()) {
     let unlisten: UnlistenFn | null = null;
@@ -190,7 +191,7 @@ export const startRagIndexing = async (
       unlisten = await listen<IndexingProgressPayload>("rag-status-update", (event) => {
         onProgress(event.payload);
       });
-      await invoke("start_rag_indexing", { vaultPath });
+      await invoke("start_rag_indexing", { vaultPath, force });
       if (unlisten) unlisten();
       return;
     } catch (err: any) {

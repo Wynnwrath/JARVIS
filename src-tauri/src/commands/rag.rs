@@ -137,6 +137,7 @@ pub async fn remove_rag_dir(
 #[tauri::command]
 pub async fn start_rag_indexing(
     vault_path: String,
+    force: bool,
     config: State<'_, tokio::sync::RwLock<AppConfig>>,
     manager: State<'_, RagManager>,
     app: AppHandle,
@@ -153,5 +154,5 @@ pub async fn start_rag_indexing(
         let _ = app.emit("rag-status-update", payload);
     };
 
-    rag_handler::start_indexing(&vault_path, &config_snapshot, &rag, &app_data_dir, emit).await
+    rag_handler::start_indexing(&vault_path, &config_snapshot, &rag, &app_data_dir, force, emit).await
 }
