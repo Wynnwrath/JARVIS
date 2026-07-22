@@ -4,6 +4,7 @@ mod manager;
 pub mod sandbox;
 mod signature;
 mod stream_consumer;
+pub(crate) mod tools;
 
 pub use builder::prebuild_agent;
 pub use dispatch::{AppAgent, AppAgentInner};

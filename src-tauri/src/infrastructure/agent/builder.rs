@@ -1,10 +1,11 @@
+use super::tools::ReadDocumentTool;
 use crate::domain::config::{AppConfig, Providers};
 use crate::domain::errors::AppError;
 use crate::infrastructure::permission_gate::AppPermissionGate;
 use crate::infrastructure::rag::RagManager;
 use agent_rs::agent::permission::PermissionPolicy;
 use agent_rs::agent::tools::{
-    GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+    GlobSearchTool, GrepSearchTool, ListDirectoryTool, ThinkTool, WriteDocumentTool,
 };
 use agent_rs::config::McpConfig;
 use agent_rs::mcp::registry::McpRegistry;
@@ -59,6 +60,7 @@ pub(crate) async fn build_agent(
             config.read_extensions.clone(),
             ask_user.clone(),
         )),
+        Box::new(ThinkTool),
     ];
 
     if config.rag_enabled {

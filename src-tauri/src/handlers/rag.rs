@@ -83,7 +83,7 @@ fn count_indexable_files(dir: &Path) -> u64 {
     count
 }
 
-const MAX_INDEX_FILE_BYTES: u64 = 50 * 1024 * 1024;
+const MAX_INDEX_FILE_BYTES: u64 = 200 * 1024 * 1024;
 
 fn collect_indexable_files(dir: &Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();

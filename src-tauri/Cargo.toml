@@ -34,7 +34,7 @@ anyhow = "1.0.102"
 crossbeam-channel = "0.5"
 jarvis-transcriber = { git = "https://github.com/PROJECT-JARV1S/jarvis-voice.git", version = "0.2.0" }
 thiserror = "2.0.18"
-agent_rs = { git = "https://github.com/skaarfundgandr/agent_rs.git", rev = "a41a34f", features = ["rag-load-dynamic"] }
+agent_rs = { git = "https://github.com/skaarfundgandr/agent_rs.git", rev = "21552e7", features = ["rag-load-dynamic"] }
 async-trait = "0.1"
 diesel = { version = "2.3", features = ["sqlite", "chrono"] }
 diesel-async = { version = "0.9", features = ["sqlite", "deadpool"] }
@@ -49,6 +49,7 @@ futures = "0.3.31"
 tracing = { version = "0.1.41", features = ["release_max_level_off"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rig-core = "0.40.0"
+pdf_oxide = "0.3"
 
 [dev-dependencies]
 rusqlite = { version = "0.32.1", features = ["bundled"] }
