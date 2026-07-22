@@ -68,6 +68,8 @@ impl RagManager {
         let embedder: Arc<dyn ErasedEmbedder> = Arc::new(svc.clone());
 
         let rag_data = app_data_dir.join("rag_data");
+        std::fs::create_dir_all(&rag_data)
+            .map_err(|e| AppError::SystemError(format!("failed to create rag data dir: {}", e)))?;
         let built = RagPipeline::builder()
             .embedder(svc)
             .store_at(&rag_data)
