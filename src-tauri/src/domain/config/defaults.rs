@@ -36,3 +36,11 @@ pub(crate) fn default_write_extensions() -> HashSet<String> {
     .map(|s| s.to_string())
     .collect()
 }
+
+pub(crate) fn default_rag_enabled() -> bool {
+    false
+}
+
+pub(crate) fn default_embedding_model() -> String {
+    "BGESmallENV15".to_string()
+}

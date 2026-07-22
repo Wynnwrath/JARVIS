@@ -9,11 +9,13 @@ use crate::commands::config::*;
 use crate::commands::documents::*;
 use crate::commands::hardware::*;
 use crate::commands::permission::*;
+use crate::commands::rag::*;
 use crate::commands::sandbox::*;
 use crate::commands::system::*;
 use crate::commands::voice::*;
 use crate::infrastructure::database::PermissionRepository;
 use crate::infrastructure::permission_gate::AppPermissionGate;
+use crate::infrastructure::rag::RagManager;
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -128,6 +130,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(domain::chat::ChatState::default())
+        .manage(RagManager::new())
         .setup(|app| {
             let handle = app.handle();
             let config = setup_config(handle)?;
@@ -197,6 +200,13 @@ pub fn run() {
             add_sandbox_root,
             remove_sandbox_root,
             list_sandbox_roots,
+            // RAG
+            get_rag_telemetry,
+            get_rag_directories,
+            toggle_rag_exclusion,
+            clear_rag_database,
+            query_rag_sandbox,
+            start_rag_indexing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

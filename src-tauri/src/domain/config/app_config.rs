@@ -5,8 +5,8 @@ use std::path::Path;
 
 use super::defaults::{
     default_compaction_prompt, default_compaction_threshold, default_database_name,
-    default_read_extensions, default_sandbox_dir, default_system_prompt,
-    default_transcription_model_path, default_write_extensions,
+    default_embedding_model, default_rag_enabled, default_read_extensions, default_sandbox_dir,
+    default_system_prompt, default_transcription_model_path, default_write_extensions,
 };
 use super::providers::Providers;
 
@@ -57,6 +57,19 @@ pub struct AppConfig {
     /// File extensions the agent is allowed to write.
     #[serde(default = "default_write_extensions")]
     pub write_extensions: HashSet<String>,
+    /// Whether the RAG subsystem is enabled for chat context injection.
+    #[serde(default = "default_rag_enabled")]
+    pub rag_enabled: bool,
+    /// Active embedding model identifier (fastembed enum variant name).
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+    /// Whether to attempt GPU execution providers for ONNX Runtime.
+    #[serde(default)]
+    pub rag_use_gpu: bool,
+    /// Directories excluded from RAG indexing (names only, matched against
+    /// the vault subdirectory name).
+    #[serde(default)]
+    pub rag_exclusions: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -78,6 +91,10 @@ impl Default for AppConfig {
             sandbox_roots: Vec::new(),
             read_extensions: default_read_extensions(),
             write_extensions: default_write_extensions(),
+            rag_enabled: default_rag_enabled(),
+            embedding_model: default_embedding_model(),
+            rag_use_gpu: false,
+            rag_exclusions: Vec::new(),
         }
     }
 }
