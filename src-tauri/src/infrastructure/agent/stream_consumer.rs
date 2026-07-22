@@ -123,7 +123,7 @@ where
             }
             Ok(MultiTurnStreamItem::FinalResponse(resp)) => {
                 tracing::debug!("Stream final response: {:?}", resp);
-                if let Some(history) = resp.history() {
+                if let Some(history) = resp.messages() {
                     final_history = history.to_vec();
                 }
             }

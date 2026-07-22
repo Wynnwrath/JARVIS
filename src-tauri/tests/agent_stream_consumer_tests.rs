@@ -92,7 +92,7 @@ async fn tool_call_sends_start_and_end() {
 #[tokio::test]
 async fn final_response_logs_and_completes() {
     let (channel, _events) = make_test_channel();
-    let final_resp = rig_core::agent::FinalResponse::empty();
+    let final_resp = rig_core::agent::PromptResponse::empty();
     let stream = make_stream(vec![Ok(MultiTurnStreamItem::FinalResponse(final_resp))]);
 
     let result = consume_chat_stream(stream, &channel).await;
