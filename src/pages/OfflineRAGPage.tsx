@@ -113,7 +113,7 @@ export const OfflineRAGPage = () => {
     <div className="h-full flex flex-col p-6 bg-offline-bg">
       <RAGHeader vaultPath={vaultPath} stats={stats} onSelectPath={handleSelectPath} />
 
-      <div className="flex-1 grid grid-cols-[240px_1fr_280px] gap-4 min-h-0">
+      <div className="flex-1 grid grid-cols-[240px_1fr_280px] grid-rows-[1fr] gap-4 min-h-0">
         {/* Column 1: Folder Browser */}
         <FolderBrowser
           folders={folders}
@@ -138,7 +138,7 @@ export const OfflineRAGPage = () => {
         )}
 
         {/* Column 3: Pipeline Controller + Search + Console */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 min-h-0">
           <PipelineController
             isSyncing={isSyncing}
             syncProgress={syncProgress}
