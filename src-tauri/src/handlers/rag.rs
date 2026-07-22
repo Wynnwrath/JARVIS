@@ -81,6 +81,25 @@ fn count_indexable_files(dir: &Path) -> u64 {
     count
 }
 
+const MAX_INDEX_FILE_BYTES: u64 = 50 * 1024 * 1024;
+
+fn collect_indexable_files(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.extend(collect_indexable_files(&path));
+            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if matches!(ext, "txt" | "md" | "pdf") {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    out
+}
+
 fn human_readable_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
     let mut size = bytes as f64;
@@ -191,9 +210,16 @@ pub async fn toggle_exclusion(
 
     if was_excluded {
         config.rag_exclusions.retain(|e| e != dir_name);
-        rag.indexer.add(&dir_path).await.map_err(|e| {
-            AppError::SystemError(format!("failed to add directory to index: {}", e))
-        })?;
+        for file in collect_indexable_files(&dir_path) {
+            let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+            if size > MAX_INDEX_FILE_BYTES {
+                tracing::warn!("skipping oversized file (>50 MB): {}", file.display());
+                continue;
+            }
+            if let Err(e) = rag.indexer.add(&file).await {
+                tracing::warn!("failed to index {}: {}", file.display(), e);
+            }
+        }
     } else {
         config.rag_exclusions.push(dir_name.to_string());
         rag.indexer.remove(&dir_path).await.map_err(|e| {
@@ -366,40 +392,72 @@ pub async fn start_indexing(
         }
     }
 
-    if dirs.is_empty() {
-        emit(IndexingProgressPayload {
-            level: "ERROR".into(),
-            message: "no indexable directories found".into(),
-            progress: 0,
-        });
-        return Err(AppError::SystemError(
-            "no indexable directories found".into(),
-        ));
-    }
-
-    let total = dirs.len();
-    for (i, dir_path) in dirs.iter().enumerate() {
+    let mut file_groups: Vec<Vec<std::path::PathBuf>> = Vec::new();
+    let mut total_files = 0usize;
+    for dir_path in &dirs {
         let name = dir_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
-        let pct = ((i + 1) as f32 / total as f32 * 90.0) as u8;
+        let mut files = Vec::new();
+        for file in collect_indexable_files(dir_path) {
+            let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+            if size > MAX_INDEX_FILE_BYTES {
+                emit(IndexingProgressPayload {
+                    level: "INDEX".into(),
+                    message: format!(
+                        "[INDEX] Skipping oversized file (>50 MB): {}",
+                        file.display()
+                    ),
+                    progress: 0,
+                });
+            } else {
+                files.push(file);
+            }
+        }
         emit(IndexingProgressPayload {
             level: "INDEX".into(),
-            message: format!("[INDEX] Indexing directory: {}", name),
-            progress: pct.min(90),
+            message: format!("[INDEX] Indexing {}: {} files", name, files.len()),
+            progress: 0,
         });
+        total_files += files.len();
+        file_groups.push(files);
+    }
 
-        if let Err(e) = rag.indexer.add(dir_path).await {
-            emit(IndexingProgressPayload {
-                level: "ERROR".into(),
-                message: format!("failed to index directory '{}': {}", name, e),
-                progress: pct.min(90),
-            });
-            return Err(AppError::SystemError(format!(
-                "failed to index directory '{}': {}",
-                name, e
-            )));
+    if total_files == 0 {
+        emit(IndexingProgressPayload {
+            level: "ERROR".into(),
+            message: "no indexable files found".into(),
+            progress: 0,
+        });
+        return Err(AppError::SystemError("no indexable files found".into()));
+    }
+
+    let mut done = 0usize;
+    let mut last_pct = 0u8;
+    for files in &file_groups {
+        for file in files {
+            if let Err(e) = rag.indexer.add(file).await {
+                emit(IndexingProgressPayload {
+                    level: "INDEX".into(),
+                    message: format!(
+                        "[INDEX] Failed to index {}: {} — skipping",
+                        file.display(),
+                        e
+                    ),
+                    progress: last_pct,
+                });
+            }
+            done += 1;
+            let pct = ((done as f32 / total_files as f32) * 90.0) as u8;
+            if pct != last_pct {
+                last_pct = pct.min(90);
+                emit(IndexingProgressPayload {
+                    level: "INDEX".into(),
+                    message: String::new(),
+                    progress: last_pct,
+                });
+            }
         }
     }
 
