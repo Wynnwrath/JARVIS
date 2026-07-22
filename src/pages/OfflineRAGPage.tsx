@@ -9,6 +9,7 @@ import { DocumentExplorer } from '@/features/rag/components/DocumentExplorer';
 import { FilePreview } from '@/features/rag/components/FilePreview';
 import { PipelineController } from '@/features/rag/components/PipelineController';
 import { PipelineConsole } from '@/features/rag/components/PipelineConsole';
+import { SearchPanel } from '@/features/rag/components/SearchPanel';
 import { RAGFooter } from '@/features/rag/components/RAGFooter';
 
 export const OfflineRAGPage = () => {
@@ -136,7 +137,7 @@ export const OfflineRAGPage = () => {
           />
         )}
 
-        {/* Column 3: Pipeline Controller + Console */}
+        {/* Column 3: Pipeline Controller + Search + Console */}
         <div className="flex flex-col gap-4">
           <PipelineController
             isSyncing={isSyncing}
@@ -145,6 +146,7 @@ export const OfflineRAGPage = () => {
             onClearDatabase={handleClearDatabase}
             onRefresh={refreshRagData}
           />
+          <SearchPanel />
           <div className="flex-1 min-h-0">
             <PipelineConsole logs={logs} />
           </div>

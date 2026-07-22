@@ -64,6 +64,10 @@ export interface AppConfig {
   sandbox_roots: string[];
   read_extensions: string[];
   write_extensions: string[];
+  rag_enabled: boolean;
+  embedding_model: string;
+  rag_use_gpu: boolean;
+  rag_exclusions: string[];
 }
 
 export interface PermissionRequest {

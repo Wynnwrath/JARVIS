@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, Cpu, Mic, Server,
+  X, Cpu, Mic, Server, Database,
   RefreshCcw, Save, RotateCcw, Check
 } from 'lucide-react';
 import {
@@ -10,8 +10,9 @@ import {
 import { GeneralTab } from '@/features/settings/tabs/GeneralTab';
 import { VoiceTab } from '@/features/settings/tabs/VoiceTab';
 import { SystemTab } from '@/features/settings/tabs/SystemTab';
+import { RagTab } from '@/features/settings/tabs/RagTab';
 
-type SettingsTab = 'general' | 'voice' | 'system';
+type SettingsTab = 'general' | 'voice' | 'system' | 'rag';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -83,7 +84,9 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     { id: 'general', label: 'General', icon: <Cpu size={14} /> },
     { id: 'voice', label: 'Voice', icon: <Mic size={14} /> },
     { id: 'system', label: 'System', icon: <Server size={14} /> },
+    { id: 'rag', label: 'RAG', icon: <Database size={14} /> },
   ];
+  const visibleTabs = isOffline ? tabs : tabs.filter(t => t.id !== 'rag');
 
   return (
     <AnimatePresence>
@@ -131,7 +134,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
             <div className="flex-1 flex overflow-hidden">
               <div className="w-48 border-r border-white/5 p-3 flex flex-col gap-1 shrink-0">
-                {tabs.map((tab) => (
+                {visibleTabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
@@ -178,6 +181,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                       {activeTab === 'general' && <GeneralTab config={config} updateConfig={updateConfig} accent="" />}
                       {activeTab === 'voice' && <VoiceTab config={config} updateConfig={updateConfig} accent="" />}
                       {activeTab === 'system' && <SystemTab config={config} updateConfig={updateConfig} accent="" />}
+                      {activeTab === 'rag' && <RagTab config={config} updateConfig={updateConfig} accent="" />}
                     </motion.div>
                   </AnimatePresence>
                 </div>
