@@ -7,6 +7,7 @@ import { Message, getMessageText } from '../types';
 import { areMessagesEqual } from '../messageUtils';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallBlock } from './ToolCallBlock';
+import { SourcesBlock } from './SourcesBlock';
 
 interface MessageItemProps {
   msg: Message;
@@ -97,6 +98,13 @@ const MessageItem = memo(({ msg, theme }: MessageItemProps) => {
                           isStreaming={!part.isDone}
                         />
                       );
+                    }
+                    if (part.kind === 'tool_result') {
+                      const toolCall = msg.parts.find(p => p.kind === 'tool_call' && p.id === part.id);
+                      if (toolCall && toolCall.kind === 'tool_call' && toolCall.name === 'rag_search') {
+                        return <SourcesBlock key={`src-${i}`} content={part.content} theme={theme} />;
+                      }
+                      return null;
                     }
                     return part.content ? (
                       <MarkdownRenderer key={`tx-${i}`} content={part.content} theme={theme} isStreaming={msg.sender === 'jarvis' && part.isDone === false} />

@@ -154,5 +154,13 @@ pub async fn start_rag_indexing(
         let _ = app.emit("rag-status-update", payload);
     };
 
-    rag_handler::start_indexing(&vault_path, &config_snapshot, &rag, &app_data_dir, force, emit).await
+    rag_handler::start_indexing(
+        &vault_path,
+        &config_snapshot,
+        &rag,
+        &app_data_dir,
+        force,
+        emit,
+    )
+    .await
 }

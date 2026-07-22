@@ -6,8 +6,8 @@ use std::path::Path;
 use super::defaults::{
     default_compaction_prompt, default_compaction_threshold, default_database_name,
     default_embedding_model, default_rag_agent_tools, default_rag_enabled, default_read_extensions,
-    default_sandbox_dir,
-    default_system_prompt, default_transcription_model_path, default_write_extensions,
+    default_sandbox_dir, default_system_prompt, default_transcription_model_path,
+    default_write_extensions,
 };
 use super::providers::Providers;
 

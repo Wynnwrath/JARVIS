@@ -101,6 +101,16 @@ impl AgentManager {
         let rag_state = app.try_state::<RagManager>();
         let rag_manager = rag_state.as_ref().map(|s| s.inner());
 
+        if config.rag_enabled {
+            if let Some(rm) = rag_manager {
+                if let Ok(app_data_dir) = app.path().app_data_dir() {
+                    if let Err(e) = rm.get_or_init(config, &app_data_dir).await {
+                        tracing::warn!(error = %e, "RAG pipeline init failed during agent build");
+                    }
+                }
+            }
+        }
+
         let needs_rebuild = {
             let sig_guard = self.signature.read().await;
             let agent_guard = self.agent.read().await;

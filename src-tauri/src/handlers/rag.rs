@@ -466,7 +466,9 @@ pub async fn start_indexing(
             let should_skip = if force {
                 false
             } else if let Some(&stored_mtime) = mtimes.get(&canonical) {
-                current_mtime.map(|cur| cur <= stored_mtime).unwrap_or(false)
+                current_mtime
+                    .map(|cur| cur <= stored_mtime)
+                    .unwrap_or(false)
             } else {
                 false
             };

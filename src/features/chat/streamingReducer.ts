@@ -81,5 +81,11 @@ export const reduceStreamEvent = (msg: Message, ev: StreamEvent): Message => {
       }
       return { ...msg, parts };
     }
+    case 'tool_result': {
+      return {
+        ...msg,
+        parts: [...msg.parts, { kind: 'tool_result', id: ev.id, content: ev.content }],
+      };
+    }
   }
 };
