@@ -15,6 +15,7 @@ import { RAGFooter } from '@/features/rag/components/RAGFooter';
 
 export const OfflineRAGPage = () => {
   const [vaultPath, setVaultPath] = useState('');
+  const [sandboxDir, setSandboxDir] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([
@@ -39,7 +40,7 @@ export const OfflineRAGPage = () => {
       try {
         const config = await getConfig();
         if (config.sandbox_dir) {
-          setVaultPath(config.sandbox_dir);
+          setSandboxDir(config.sandbox_dir);
         }
         setRagDirs(config.rag_dirs ?? []);
       } catch (err) {
@@ -117,7 +118,7 @@ export const OfflineRAGPage = () => {
     setLogs(prev => [...prev, '[PIPELINE] Starting document indexing pipeline...']);
     try {
       const interval = setInterval(() => setSyncProgress(p => Math.min(p + 10, 90)), 800);
-      await startRagIndexing(vaultPath, (payload) => {
+      await startRagIndexing(vaultPath || sandboxDir, (payload) => {
         if (payload.message) setLogs(prev => [...prev, `[${payload.level}] ${payload.message}`]);
         setSyncProgress(payload.progress);
       });
@@ -150,11 +151,14 @@ export const OfflineRAGPage = () => {
   const folders = useMemo(() => documentFiles.filter(f => f.is_dir).map(f => f.name), [documentFiles]);
   const docs = useMemo(() => documentFiles.filter(f => !f.is_dir).map(f => ({ name: f.name, path: f.path })), [documentFiles]);
   const ragDocs = useMemo(() => ragDir.files.filter(f => !f.is_dir).map(f => ({ name: f.name, path: f.path })), [ragDir.files]);
+  const ragFolders = useMemo(() => ragDir.files.filter(f => f.is_dir).map(f => f.path), [ragDir.files]);
 
   const activeRagDirName = activeRagDir
     ? activeRagDir.replace(/[/\\]$/, "").split(/[/\\]/).pop() || activeRagDir
     : null;
-  const browserSelected = activeRagDirName ?? (currentPath ? currentPath.split(/[/\\]/).pop() || null : null);
+  const browserSelected = activeRagDir
+    ? (ragDir.currentPath.replace(/[/\\]$/, "").split(/[/\\]/).pop() || activeRagDirName)
+    : (currentPath ? currentPath.split(/[/\\]/).pop() || null : null);
 
   const handleBrowserBack = () => {
     if (activeRagDir) {
@@ -170,14 +174,17 @@ export const OfflineRAGPage = () => {
 
   return (
     <div className="h-full flex flex-col p-6 bg-offline-bg">
-      <RAGHeader vaultPath={vaultPath} stats={stats} onSelectPath={handleSelectPath} />
+      <RAGHeader vaultPath={vaultPath || sandboxDir} stats={stats} onSelectPath={handleSelectPath} />
 
       <div className="flex-1 grid grid-cols-[240px_1fr_280px] grid-rows-[1fr] gap-4 min-h-0">
         {/* Column 1: Folder Browser */}
         <FolderBrowser
-          folders={folders}
+          folders={activeRagDir ? ragFolders : folders}
           selectedFolder={browserSelected}
-          onSelect={(folder) => { setActiveRagDir(null); loadDirectory(folder); }}
+          onSelect={(folder) => {
+            if (activeRagDir) { ragDir.loadDirectory(folder); }
+            else { setActiveRagDir(null); loadDirectory(folder); }
+          }}
           onBack={handleBrowserBack}
           ragDirs={ragDirs}
           activeRagDir={activeRagDir}

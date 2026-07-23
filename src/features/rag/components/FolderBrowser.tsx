@@ -55,7 +55,7 @@ export const FolderBrowser = ({
               className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-offline-core/5 text-secondary-txt hover:text-offline-core transition-colors font-mono text-[11px] cursor-pointer"
             >
               <Folder size={14} className="shrink-0" />
-              <span className="truncate">{folder}</span>
+              <span className="truncate">{dirDisplayName(folder)}</span>
             </button>
           ))}
         </div>
