@@ -151,14 +151,11 @@ export const OfflineRAGPage = () => {
   const folders = useMemo(() => documentFiles.filter(f => f.is_dir).map(f => f.name), [documentFiles]);
   const docs = useMemo(() => documentFiles.filter(f => !f.is_dir).map(f => ({ name: f.name, path: f.path })), [documentFiles]);
   const ragDocs = useMemo(() => ragDir.files.filter(f => !f.is_dir).map(f => ({ name: f.name, path: f.path })), [ragDir.files]);
-  const ragFolders = useMemo(() => ragDir.files.filter(f => f.is_dir).map(f => f.path), [ragDir.files]);
 
   const activeRagDirName = activeRagDir
     ? activeRagDir.replace(/[/\\]$/, "").split(/[/\\]/).pop() || activeRagDir
     : null;
-  const browserSelected = activeRagDir
-    ? (ragDir.currentPath.replace(/[/\\]$/, "").split(/[/\\]/).pop() || activeRagDirName)
-    : (currentPath ? currentPath.split(/[/\\]/).pop() || null : null);
+  const browserSelected = activeRagDirName ?? (currentPath ? currentPath.split(/[/\\]/).pop() || null : null);
 
   const handleBrowserBack = () => {
     if (activeRagDir) {
@@ -179,12 +176,9 @@ export const OfflineRAGPage = () => {
       <div className="flex-1 grid grid-cols-[240px_1fr_280px] grid-rows-[1fr] gap-4 min-h-0">
         {/* Column 1: Folder Browser */}
         <FolderBrowser
-          folders={activeRagDir ? ragFolders : folders}
+          folders={folders}
           selectedFolder={browserSelected}
-          onSelect={(folder) => {
-            if (activeRagDir) { ragDir.loadDirectory(folder); }
-            else { setActiveRagDir(null); loadDirectory(folder); }
-          }}
+          onSelect={(folder) => { setActiveRagDir(null); loadDirectory(folder); }}
           onBack={handleBrowserBack}
           ragDirs={ragDirs}
           activeRagDir={activeRagDir}

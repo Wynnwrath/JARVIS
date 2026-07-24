@@ -232,35 +232,41 @@ pub async fn toggle_exclusion(
     Ok(!was_excluded)
 }
 
+fn collect_files_recursive(
+    root: &Path,
+    dir: &Path,
+    out: &mut Vec<RagDirEntry>,
+) -> Result<(), AppError> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| AppError::SystemError(format!("failed to read directory: {}", e)))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| AppError::SystemError(format!("failed to read entry: {}", e)))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files_recursive(root, &path, out)?;
+        } else {
+            let relative = path.strip_prefix(root).unwrap_or(&path);
+            let size = entry.metadata().ok().map(|m| m.len());
+            out.push(RagDirEntry {
+                name: relative.to_string_lossy().replace('\\', "/"),
+                is_dir: false,
+                path: path.to_string_lossy().into_owned(),
+                size,
+            });
+        }
+    }
+    Ok(())
+}
+
 pub async fn list_rag_directory(
     path: &str,
     config: &AppConfig,
 ) -> Result<Vec<RagDirEntry>, AppError> {
     let canonical = assert_within_rag_dirs(Path::new(path), config)?;
-    let mut entries = std::fs::read_dir(&canonical)
-        .map_err(|e| AppError::SystemError(format!("failed to read directory: {}", e)))?;
-
     let mut out = Vec::new();
-    while let Some(entry) = entries.next().transpose()? {
-        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-        let size = if is_dir {
-            None
-        } else {
-            entry.metadata().ok().map(|m| m.len())
-        };
-        out.push(RagDirEntry {
-            name: entry.file_name().to_string_lossy().into_owned(),
-            is_dir,
-            path: entry.path().to_string_lossy().into_owned(),
-            size,
-        });
-    }
-    out.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
-
+    collect_files_recursive(&canonical, &canonical, &mut out)?;
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(out)
 }
 
