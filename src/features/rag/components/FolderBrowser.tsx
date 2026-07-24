@@ -20,7 +20,7 @@ export const FolderBrowser = ({
   ragDirs, activeRagDir, onAddDir, onSelectRagDir, onRemoveRagDir
 }: FolderBrowserProps) => {
   return (
-    <div className="bg-offline-surface-dark border border-offline-border rounded-xl p-4 h-full flex flex-col">
+    <div className="bg-offline-surface-dark border border-offline-border rounded-xl p-4 h-full min-h-0 flex flex-col">
       <div className="flex items-center gap-2 mb-3">
         {selectedFolder && (
           <button onClick={onBack} className="p-1 hover:bg-white/5 rounded cursor-pointer">

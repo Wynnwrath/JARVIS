@@ -245,15 +245,17 @@ fn collect_files_recursive(
         let path = entry.path();
         if path.is_dir() {
             collect_files_recursive(root, &path, out)?;
-        } else {
-            let relative = path.strip_prefix(root).unwrap_or(&path);
-            let size = entry.metadata().ok().map(|m| m.len());
-            out.push(RagDirEntry {
-                name: relative.to_string_lossy().replace('\\', "/"),
-                is_dir: false,
-                path: path.to_string_lossy().into_owned(),
-                size,
-            });
+        } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            if matches!(ext, "txt" | "md" | "pdf") {
+                let relative = path.strip_prefix(root).unwrap_or(&path);
+                let size = entry.metadata().ok().map(|m| m.len());
+                out.push(RagDirEntry {
+                    name: relative.to_string_lossy().replace('\\', "/"),
+                    is_dir: false,
+                    path: path.to_string_lossy().into_owned(),
+                    size,
+                });
+            }
         }
     }
     Ok(())
