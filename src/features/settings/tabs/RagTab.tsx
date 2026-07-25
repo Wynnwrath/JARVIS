@@ -45,7 +45,7 @@ export const RagTab = ({ config, updateConfig }: TabProps) => {
             className="w-full bg-white/[0.02] hover:bg-white/[0.04] border border-white/10 rounded-lg px-4 py-3 text-sm font-mono text-primary-txt focus:outline-none focus:border-[var(--theme-accent)]/50 focus:ring-1 focus:ring-[var(--theme-accent)]/30 transition-all duration-300 appearance-none cursor-pointer"
           >
             {EMBEDDING_MODELS.map((group) => (
-              <optgroup key={group.category} label={group.category}>
+              <optgroup key={group.category} label={group.category} className="bg-[#121214] text-primary-txt">
                 {group.models.map((m) => (
                   <option
                     key={m.name}
