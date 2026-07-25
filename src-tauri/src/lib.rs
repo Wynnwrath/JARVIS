@@ -81,8 +81,8 @@ fn setup_telemetry(app: &tauri::AppHandle) {
     app.manage(system_service);
 
     let app_handle = app.clone();
-    std::thread::spawn(move || {
-        infrastructure::system::start_telemetry_worker(app_handle);
+    tauri::async_runtime::spawn(async move {
+        infrastructure::system::start_telemetry_worker(app_handle).await;
     });
 }
 
@@ -211,6 +211,15 @@ pub fn run() {
             read_rag_document,
             remove_rag_dir,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                infrastructure::system::TELEMETRY_SHUTDOWN
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            if let tauri::RunEvent::Exit = event {
+                std::process::exit(0);
+            }
+        });
 }
