@@ -25,17 +25,26 @@ impl RagManager {
         }
     }
 
-    pub async fn get_or_init(
+            pub async fn get_or_init(
         &self,
         config: &AppConfig,
         app_data_dir: &Path,
     ) -> Result<Arc<BuiltRag>, AppError> {
         let fingerprint = format!("{}:{}", config.embedding_model, config.rag_use_gpu);
+        let cache_dir = app_data_dir.join("embedding_cache");
+
+        tracing::info!(
+            model = %config.embedding_model,
+            use_gpu = config.rag_use_gpu,
+            cache_dir = %cache_dir.display(),
+            "RAG get_or_init called"
+        );
 
         {
             let inner = self.inner.read().await;
             let fp = self.config_fingerprint.read().await;
             if inner.is_some() && *fp == Some(fingerprint.clone()) {
+                tracing::info!("RAG cache hit — returning existing instance");
                 return Ok(Arc::clone(inner.as_ref().unwrap()));
             }
         }
@@ -45,8 +54,11 @@ impl RagManager {
             .parse()
             .map_err(|e| AppError::SystemError(format!("invalid embedding model: {}", e)))?;
 
+        tracing::info!("parsed embedding model variant");
+
         let mut eps = Vec::new();
         if config.rag_use_gpu {
+            tracing::info!(os = std::env::consts::OS, "building GPU execution providers");
             #[cfg(target_os = "windows")]
             eps.push(ort::ep::DirectML::default().build());
             #[cfg(target_os = "linux")]
@@ -57,16 +69,32 @@ impl RagManager {
         }
         eps.push(ort::ep::CPU::default().build());
 
-        let svc = EmbeddingService::from_fastembed_with_providers_and_cache_dir(
-            model,
-            eps,
-            app_data_dir.join("embedding_cache"),
-        )
-        .map_err(|e| AppError::SystemError(format!("failed to create embedding service: {}", e)))?;
+        tracing::info!("loading embedding model (may download from HuggingFace on first run)");
+
+        let svc = tokio::task::spawn_blocking(move || {
+            EmbeddingService::from_fastembed_with_providers_and_cache_dir(model, eps, cache_dir)
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "embedding service init task panicked");
+            AppError::SystemError(format!("embedding service init task panicked: {}", e))
+        })?
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to create embedding service");
+            AppError::SystemError(format!("failed to create embedding service: {}", e))
+        })?;
+
+        tracing::info!("embedding service initialized");
 
         let rag_data = app_data_dir.join("rag_data");
         std::fs::create_dir_all(&rag_data)
-            .map_err(|e| AppError::SystemError(format!("failed to create rag data dir: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to create rag data dir");
+                AppError::SystemError(format!("failed to create rag data dir: {}", e))
+            })?;
+
+        tracing::info!("building RAG pipeline");
+
         let built = RagPipeline::builder()
             .embedder(svc)
             .store_at(&rag_data)
@@ -74,7 +102,12 @@ impl RagManager {
             .loader("pdf", Arc::new(JarvisPdfLoader))
             .build()
             .await
-            .map_err(|e| AppError::SystemError(format!("failed to build RAG pipeline: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to build RAG pipeline");
+                AppError::SystemError(format!("failed to build RAG pipeline: {}", e))
+            })?;
+
+        tracing::info!("RAG pipeline built successfully");
 
         let arc = Arc::new(built);
 
@@ -86,6 +119,8 @@ impl RagManager {
             *fp = Some(fingerprint);
             *ip = Some(rag_data.join("rag.tvim"));
         }
+
+        tracing::info!("RAG pipeline initialized and cached");
 
         Ok(arc)
     }
