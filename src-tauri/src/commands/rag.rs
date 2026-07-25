@@ -40,12 +40,13 @@ pub async fn toggle_rag_exclusion(
         .app_data_dir()
         .map_err(|e| AppError::SystemError(format!("failed to resolve app data dir: {}", e)))?;
 
+    let config_snapshot = config.read().await.clone();
+    let rag = manager.get_or_init(&config_snapshot, &app_data_dir).await?;
+
     let new_excluded;
     let updated_config;
-
     {
         let mut config_guard = config.write().await;
-        let rag = manager.get_or_init(&config_guard, &app_data_dir).await?;
         new_excluded = rag_handler::toggle_exclusion(&dir_name, &mut config_guard, &rag).await?;
         updated_config = config_guard.clone();
     }
@@ -68,12 +69,12 @@ pub async fn clear_rag_database(
     manager: State<'_, RagManager>,
     app: AppHandle,
 ) -> Result<(), AppError> {
-    let config_guard = config.read().await;
+    let config_snapshot = config.read().await.clone();
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| AppError::SystemError(format!("failed to resolve app data dir: {}", e)))?;
-    manager.clear(&config_guard, &app_data_dir).await
+    manager.clear(&config_snapshot, &app_data_dir).await
 }
 
 #[tauri::command]

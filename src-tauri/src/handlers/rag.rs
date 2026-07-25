@@ -268,7 +268,7 @@ pub async fn list_rag_directory(
     let canonical = assert_within_rag_dirs(Path::new(path), config)?;
     let mut out = Vec::new();
     collect_files_recursive(&canonical, &canonical, &mut out)?;
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
 }
 
