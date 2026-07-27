@@ -8,7 +8,7 @@ interface DocumentExplorerProps {
 
 export const DocumentExplorer = ({ documents, onSelect, selectedDocument }: DocumentExplorerProps) => {
   return (
-    <div className="bg-offline-surface-dark border border-offline-border rounded-xl p-4 h-full flex flex-col">
+    <div className="bg-offline-surface-dark border border-offline-border rounded-xl p-4 h-full min-h-0 flex flex-col">
       <div className="mb-3">
         <span className="text-[10px] font-mono text-offline-core uppercase tracking-widest font-bold">
           Documents

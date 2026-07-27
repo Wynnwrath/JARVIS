@@ -2,7 +2,7 @@ use crate::domain::chat::StreamEvent;
 use crate::domain::errors::AppError;
 use futures::StreamExt;
 use rig_core::agent::MultiTurnStreamItem;
-use rig_core::streaming::{StreamedAssistantContent, ToolCallDeltaContent};
+use rig_core::streaming::{StreamedAssistantContent, StreamedUserContent, ToolCallDeltaContent};
 
 /// Consumes a rig `MultiTurnStreamItem` stream and emits `StreamEvent`s
 /// to the Tauri IPC channel. Returns the updated conversation history
@@ -123,12 +123,38 @@ where
             }
             Ok(MultiTurnStreamItem::FinalResponse(resp)) => {
                 tracing::debug!("Stream final response: {:?}", resp);
-                if let Some(history) = resp.history() {
+                if let Some(history) = resp.messages() {
                     final_history = history.to_vec();
                 }
             }
             Err(e) => {
                 return Err(AppError::SystemError(e.to_string()));
+            }
+            Ok(MultiTurnStreamItem::StreamUserItem(StreamedUserContent::ToolResult {
+                tool_result,
+                internal_call_id,
+            })) => {
+                let content = tool_result
+                    .content
+                    .iter()
+                    .filter_map(|c| match c {
+                        rig_core::completion::message::ToolResultContent::Text(t) => {
+                            Some(t.text.as_str())
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if channel
+                    .send(StreamEvent::ToolResult {
+                        id: internal_call_id,
+                        content,
+                    })
+                    .is_err()
+                {
+                    aborted = true;
+                    break;
+                }
             }
             _other => {
                 tracing::warn!("unhandled MultiTurnStreamItem variant from stream");

@@ -9,11 +9,13 @@ use crate::commands::config::*;
 use crate::commands::documents::*;
 use crate::commands::hardware::*;
 use crate::commands::permission::*;
+use crate::commands::rag::*;
 use crate::commands::sandbox::*;
 use crate::commands::system::*;
 use crate::commands::voice::*;
 use crate::infrastructure::database::PermissionRepository;
 use crate::infrastructure::permission_gate::AppPermissionGate;
+use crate::infrastructure::rag::RagManager;
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -79,8 +81,8 @@ fn setup_telemetry(app: &tauri::AppHandle) {
     app.manage(system_service);
 
     let app_handle = app.clone();
-    std::thread::spawn(move || {
-        infrastructure::system::start_telemetry_worker(app_handle);
+    tauri::async_runtime::spawn(async move {
+        infrastructure::system::start_telemetry_worker(app_handle).await;
     });
 }
 
@@ -128,6 +130,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(domain::chat::ChatState::default())
+        .manage(RagManager::new())
         .setup(|app| {
             let handle = app.handle();
             let config = setup_config(handle)?;
@@ -197,7 +200,26 @@ pub fn run() {
             add_sandbox_root,
             remove_sandbox_root,
             list_sandbox_roots,
+            // RAG
+            get_rag_telemetry,
+            get_rag_directories,
+            toggle_rag_exclusion,
+            clear_rag_database,
+            query_rag_sandbox,
+            start_rag_indexing,
+            list_rag_directory,
+            read_rag_document,
+            remove_rag_dir,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                infrastructure::system::TELEMETRY_SHUTDOWN
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            if let tauri::RunEvent::Exit = event {
+                std::process::exit(0);
+            }
+        });
 }

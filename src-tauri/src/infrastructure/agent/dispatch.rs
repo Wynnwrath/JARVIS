@@ -108,7 +108,7 @@ impl<M> AppAgentInner<M>
 where
     M: CompletionModel + WasmCompatSend + WasmCompatSync + 'static,
     M::StreamingResponse: rig_core::completion::GetTokenUsage + Send + 'static,
-    Agent<M>: StreamingChat<M, M::StreamingResponse, Hook = ()> + Prompt + Clone,
+    Agent<M>: StreamingChat<M, M::StreamingResponse> + Prompt + Clone,
 {
     /// Streaming chat via direct rig `Agent::stream_chat()`.
     ///
@@ -139,7 +139,7 @@ where
         let stream = self
             .agent
             .stream_chat(prompt, working_history.clone())
-            .multi_turn(self.max_cycles)
+            .max_turns(self.max_cycles)
             .await;
 
         let updated_history = consume_chat_stream(stream, channel).await?;

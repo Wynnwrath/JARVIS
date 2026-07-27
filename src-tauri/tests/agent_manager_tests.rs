@@ -26,6 +26,12 @@ fn config_a() -> AppConfig {
         silence_duration_ms: 500,
         read_extensions: read_exts,
         write_extensions: write_exts,
+        rag_enabled: false,
+        rag_agent_tools: Vec::new(),
+        embedding_model: "BGESmallENV15".to_string(),
+        rag_use_gpu: false,
+        rag_exclusions: Vec::new(),
+        rag_dirs: Vec::new(),
     }
 }
 
@@ -51,6 +57,12 @@ fn config_b() -> AppConfig {
         silence_duration_ms: 500,
         read_extensions: read_exts,
         write_extensions: write_exts,
+        rag_enabled: false,
+        rag_agent_tools: Vec::new(),
+        embedding_model: "BGESmallENV15".to_string(),
+        rag_use_gpu: false,
+        rag_exclusions: Vec::new(),
+        rag_dirs: Vec::new(),
     }
 }
 

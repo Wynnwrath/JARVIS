@@ -3,7 +3,8 @@ export type StreamEvent =
   | { type: 'reasoning'; id: string; delta: string; is_final: boolean }
   | { type: 'tool_call_start'; id: string; name: string }
   | { type: 'tool_call_delta'; id: string; args_delta: string }
-  | { type: 'tool_call_end'; id: string; args: string };
+  | { type: 'tool_call_end'; id: string; args: string }
+  | { type: 'tool_result'; id: string; content: string };
 
 export interface ChatResponse {
   message: string;
@@ -64,6 +65,11 @@ export interface AppConfig {
   sandbox_roots: string[];
   read_extensions: string[];
   write_extensions: string[];
+  rag_enabled: boolean;
+  embedding_model: string;
+  rag_use_gpu: boolean;
+  rag_exclusions: string[];
+  rag_dirs: string[];
 }
 
 export interface PermissionRequest {

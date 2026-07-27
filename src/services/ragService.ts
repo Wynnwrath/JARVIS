@@ -27,6 +27,13 @@ export interface IndexingProgressPayload {
   progress: number;
 }
 
+export interface RagDirEntry {
+  name: string;
+  is_dir: boolean;
+  path: string;
+  size?: number;
+}
+
 const isTauri = () => {
   return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
 };
@@ -159,9 +166,24 @@ export const queryRagSandbox = async (query: string): Promise<SearchResult[]> =>
   );
 };
 
+export const listRagDirectory = async (path: string): Promise<RagDirEntry[]> => {
+  const result = await tryInvoke<RagDirEntry[]>("list_rag_directory", { path });
+  return result ?? [];
+};
+
+export const readRagDocument = async (path: string): Promise<string> => {
+  const result = await tryInvoke<string>("read_rag_document", { path });
+  return result ?? `[MOCK CONTENT] File content for: ${path}`;
+};
+
+export const removeRagDir = async (dirPath: string): Promise<void> => {
+  await tryInvoke<void>("remove_rag_dir", { dirPath });
+};
+
 export const startRagIndexing = async (
-  vaultPath: string, 
-  onProgress: (payload: IndexingProgressPayload) => void
+  vaultPath: string,
+  onProgress: (payload: IndexingProgressPayload) => void,
+  force: boolean = false
 ): Promise<void> => {
   if (isTauri()) {
     let unlisten: UnlistenFn | null = null;
@@ -169,7 +191,7 @@ export const startRagIndexing = async (
       unlisten = await listen<IndexingProgressPayload>("rag-status-update", (event) => {
         onProgress(event.payload);
       });
-      await invoke("start_rag_indexing", { vaultPath });
+      await invoke("start_rag_indexing", { vaultPath, force });
       if (unlisten) unlisten();
       return;
     } catch (err: any) {

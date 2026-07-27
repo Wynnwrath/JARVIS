@@ -29,6 +29,10 @@ pub enum StreamEvent {
         id: String,
         args: String,
     },
+    ToolResult {
+        id: String,
+        content: String,
+    },
 }
 
 /// Managed state for the chat subsystem.

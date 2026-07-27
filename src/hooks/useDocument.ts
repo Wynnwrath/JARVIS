@@ -72,10 +72,11 @@ export const useDocument = (initialPath = "") => {
     loadDirectory(parentPath);
   }, [currentPath, loadDirectory]);
 
-  // Load directory on mount
   useEffect(() => {
-    loadDirectory();
-  }, [loadDirectory]);
+    if (initialPath) {
+      loadDirectory(initialPath);
+    }
+  }, [initialPath]);
 
   return {
     currentPath,

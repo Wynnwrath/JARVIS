@@ -1,9 +1,11 @@
+use super::tools::ReadDocumentTool;
 use crate::domain::config::{AppConfig, Providers};
 use crate::domain::errors::AppError;
 use crate::infrastructure::permission_gate::AppPermissionGate;
+use crate::infrastructure::rag::RagManager;
 use agent_rs::agent::permission::PermissionPolicy;
 use agent_rs::agent::tools::{
-    GlobSearchTool, GrepSearchTool, ListDirectoryTool, ReadDocumentTool, WriteDocumentTool,
+    GlobSearchTool, GrepSearchTool, ListDirectoryTool, ThinkTool, WriteDocumentTool,
 };
 use agent_rs::config::McpConfig;
 use agent_rs::mcp::registry::McpRegistry;
@@ -20,6 +22,7 @@ pub(crate) async fn build_agent(
     config: &AppConfig,
     app: Option<&tauri::AppHandle>,
     gate: Option<Arc<AppPermissionGate>>,
+    rag_manager: Option<&RagManager>,
 ) -> Result<AppAgent, AppError> {
     use tauri::Emitter;
 
@@ -57,7 +60,21 @@ pub(crate) async fn build_agent(
             config.read_extensions.clone(),
             ask_user.clone(),
         )),
+        Box::new(ThinkTool),
     ];
+
+    if config.rag_enabled {
+        if let Some(rm) = rag_manager {
+            if let Some(rag) = rm.get().await {
+                if config.rag_agent_tools.iter().any(|t| t == "manage") {
+                    tools.push(Box::new(rag.indexer.tool(ask_user.clone())));
+                }
+                if config.rag_agent_tools.iter().any(|t| t == "search") {
+                    tools.push(Box::new(rag.indexer.search_tool()));
+                }
+            }
+        }
+    }
 
     if Path::new(&config.mcp_config_path).exists() {
         if let Ok(mcp_config) = McpConfig::from_path(&config.mcp_config_path) {
@@ -111,11 +128,12 @@ pub(crate) async fn build_agent(
                 .preamble(&config.compaction_prompt)
                 .build();
 
-            let agent = rig_core::agent::AgentBuilder::new(model)
+            let agent_builder = rig_core::agent::AgentBuilder::new(model)
                 .tools(tools)
                 .preamble(&config.system_prompt)
-                .default_max_turns(20)
-                .build();
+                .default_max_turns(20);
+
+            let agent = agent_builder.build();
 
             Ok(AppAgent::OpenAi(AppAgentInner {
                 agent,
@@ -139,12 +157,13 @@ pub(crate) async fn build_agent(
                 .preamble(&config.compaction_prompt)
                 .build();
 
-            let agent = client
+            let agent_builder = client
                 .agent(&config.chat_model)
                 .tools(tools)
                 .preamble(&config.system_prompt)
-                .default_max_turns(20)
-                .build();
+                .default_max_turns(20);
+
+            let agent = agent_builder.build();
 
             Ok(AppAgent::Gemini(AppAgentInner {
                 agent,
@@ -168,12 +187,13 @@ pub(crate) async fn build_agent(
                 .preamble(&config.compaction_prompt)
                 .build();
 
-            let agent = client
+            let agent_builder = client
                 .agent(&config.chat_model)
                 .tools(tools)
                 .preamble(&config.system_prompt)
-                .default_max_turns(20)
-                .build();
+                .default_max_turns(20);
+
+            let agent = agent_builder.build();
 
             Ok(AppAgent::Anthropic(AppAgentInner {
                 agent,

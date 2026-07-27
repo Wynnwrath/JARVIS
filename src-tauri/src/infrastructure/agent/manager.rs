@@ -2,6 +2,7 @@ use crate::domain::chat::StreamEvent;
 use crate::domain::config::AppConfig;
 use crate::domain::errors::AppError;
 use crate::infrastructure::permission_gate::AppPermissionGate;
+use crate::infrastructure::rag::RagManager;
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
@@ -97,6 +98,19 @@ impl AgentManager {
             tracing::warn!("AppPermissionGate not found in managed state during agent build — permission prompts will not be shown");
         }
 
+        let rag_state = app.try_state::<RagManager>();
+        let rag_manager = rag_state.as_ref().map(|s| s.inner());
+
+        if config.rag_enabled {
+            if let Some(rm) = rag_manager {
+                if let Ok(app_data_dir) = app.path().app_data_dir() {
+                    if let Err(e) = rm.get_or_init(config, &app_data_dir).await {
+                        tracing::warn!(error = %e, "RAG pipeline init failed during agent build");
+                    }
+                }
+            }
+        }
+
         let needs_rebuild = {
             let sig_guard = self.signature.read().await;
             let agent_guard = self.agent.read().await;
@@ -104,7 +118,7 @@ impl AgentManager {
         };
 
         if needs_rebuild {
-            let new_agent = build_agent(config, Some(app), gate).await?;
+            let new_agent = build_agent(config, Some(app), gate, rag_manager).await?;
 
             let mut sig_guard = self.signature.write().await;
             let mut agent_guard = self.agent.write().await;

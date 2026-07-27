@@ -1,5 +1,6 @@
 use crate::domain::errors::AppError;
 use crate::domain::system::{SystemInfo, SystemInfoService};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 use std::sync::RwLock;
 use sysinfo::{Disks, System};
@@ -7,6 +8,8 @@ use sysinfo::{Disks, System};
 /// Cached latest telemetry snapshot, written by the background worker and read by [`LocalSystemInfoService`].
 pub static LATEST_TELEMETRY: LazyLock<RwLock<Option<SystemInfo>>> =
     LazyLock::new(|| RwLock::new(None));
+
+pub static TELEMETRY_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 /// Default implementation of [`SystemInfoService`] that reads from [`LATEST_TELEMETRY`].
 #[derive(Clone, Default)]
@@ -52,18 +55,24 @@ impl SystemInfoService for LocalSystemInfoService {
 ///
 /// * `app_handle` - The Tauri [`AppHandle`](tauri::AppHandle) used to emit
 ///   `"system-telemetry"` events to the frontend.
-pub fn start_telemetry_worker(app_handle: tauri::AppHandle) {
+pub async fn start_telemetry_worker(app_handle: tauri::AppHandle) {
     use tauri::Emitter;
 
     let mut sys = System::new();
     let mut components = sysinfo::Components::new_with_refreshed_list();
-    // Warm up CPU and memory measurement
     sys.refresh_cpu_all();
     sys.refresh_memory();
 
     loop {
-        // Sleep first so we have a delta for CPU usage calculations
-        std::thread::sleep(std::time::Duration::from_secs(3));
+        if TELEMETRY_SHUTDOWN.load(Ordering::SeqCst) {
+            break;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+        if TELEMETRY_SHUTDOWN.load(Ordering::SeqCst) {
+            break;
+        }
 
         sys.refresh_cpu_all();
         sys.refresh_memory();
